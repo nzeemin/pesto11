@@ -1,0 +1,44 @@
+-q -v
+----------------------------------------------------------------------
+type
+  Day = (Mon, Tue, Wed);
+  Small = 0..200; Signed = -1..1; Letters = 'A'..'Z'; Days = Tue..Wed;
+  Str = string[80];
+  Vec = array[1..10] of Integer;
+  Grid = array[0..2, Day] of Char;
+  Bits = set of 0..15; Chars = set of Char; DaySet = set of Day;
+  PNode = ^Node;
+  Node = record
+    Flag: Boolean;
+    Value: Integer;
+    Next: PNode;
+    case Kind: Day of
+      Mon: (X: Real);
+      Tue: (S: string[5]; B: Byte);
+      Wed: ()
+  end;
+  Pair = record A, B: Char end;
+  Mixed = record A: Char; I: Integer; C: Char end;
+  F = file of Node; U = file;
+begin end.
+----------------------------------------------------------------------
+PROGRAM
+  TYPE Day = (Mon, Tue, Wed) {size 1}
+  TYPE Small = 0..200 {size 1}
+  TYPE Signed = -1..1 {size 2}
+  TYPE Letters = 'A'..'Z' {size 1}
+  TYPE Days = Tue..Wed {size 1}
+  TYPE Str = string[80] {size 81}
+  TYPE Vec = array[1..10] of Integer {size 20}
+  TYPE Grid = array[0..2] of array[Day] of Char {size 9}
+  TYPE Bits = set of 0..15 {size 2}
+  TYPE Chars = set of Char {size 32}
+  TYPE DaySet = set of Day {size 1}
+  TYPE PNode = ^Node {size 2}
+  TYPE Node = record Flag: Boolean; Value: Integer; Next: PNode; case Kind: Day of Mon: (X: Real); Tue: (S: string[5]; B: Byte); Wed: () end {size 14}
+  TYPE Pair = record A, B: Char end {size 2}
+  TYPE Mixed = record A: Char; I: Integer; C: Char end {size 6}
+  TYPE F = file of Node {size 528}
+  TYPE U = file {size 528}
+  BEGIN
+    EMPTY

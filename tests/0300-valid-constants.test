@@ -1,0 +1,38 @@
+-q -v
+----------------------------------------------------------------------
+const
+  N = 10; Neg = -32768; MinusN = -N; H = $FFFF; H2 = $8000;
+  R = 1.5E3; NegR = -2.5;
+  C = 'A'; Q = ''''; S = 'Hello'#13#10; E = ''; Bell = ^G;
+  T = True; M = MaxInt;
+type Day = (Mon, Tue, Wed);
+const D = Wed;
+  Big: Integer = 1000;
+  Digits: array[0..3] of Char = '0123';
+  Names: array[Day] of string[3] = ('Mon', 'Tue', 'Wed');
+  Vowels: set of Char = ['a', 'e'..'i'];
+begin end.
+----------------------------------------------------------------------
+PROGRAM
+  CONST N = 10 {Integer 10}
+  CONST Neg = -32768 {Integer -32768}
+  CONST MinusN = -10 {Integer -10}
+  CONST H = $FFFF {Integer -1}
+  CONST H2 = $8000 {Integer -32768}
+  CONST R = 1.5E3 {Real 1500.0}
+  CONST NegR = -2.5 {Real -2.5}
+  CONST C = 'A' {Char 'A'}
+  CONST Q = '''' {Char ''''}
+  CONST S = 'Hello'#13#10 {string[255] 'Hello'#13#10}
+  CONST E = '' {string[255] ''}
+  CONST Bell = #7 {Char #7}
+  CONST T = True {Boolean True}
+  CONST M = 32767 {Integer 32767}
+  TYPE Day = (Mon, Tue, Wed) {size 1}
+  CONST D = Wed {(Mon, Tue, Wed) Wed}
+  CONST Big: Integer = 1000 {C00001, size 2}
+  CONST Digits: array[0..3] of Char = '0123' {C00002, size 4}
+  CONST Names: array[Day] of string[3] = ('Mon', 'Tue', 'Wed') {C00003, size 12}
+  CONST Vowels: set of Char = ['a', 'e'..'i'] {C00004, size 32}
+  BEGIN
+    EMPTY

@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <set>
+#include <map>
 #include <iostream>
 #include <filesystem>
 
@@ -242,9 +243,9 @@ private:
 
 struct ConstValue
 {
-    int64_t ivalue;
-    double  dvalue;
-    string  svalue;
+    int64_t ivalue;         // Ordinal value: integer, char, boolean, enumeration
+    double  dvalue;         // Real value
+    string  svalue;         // String value; for a set, the 32-byte bit map
 public:
     ConstValue() : ivalue(0), dvalue(0.0) {}
 };
@@ -283,6 +284,26 @@ public:
     SetItemModel() : from(-1), to(-1) {}
 };
 
+// Implicit conversion of a node result, set by the validator
+enum ConvertKind
+{
+    ConvertNone = 0,
+    ConvertIntToReal,       // Integer -> Real
+    ConvertCharToString,    // Char -> String
+    ConvertArrayToString,   // array of Char -> String
+};
+
+// Location of a variable or a temporary: a global label or an offset from R5
+struct TempSlot
+{
+    string  asmlabel;       // Non-empty for a global location
+    int     offset;         // Offset from R5 otherwise
+public:
+    TempSlot() : offset(0) {}
+    bool IsValid() const { return !asmlabel.empty() || offset != 0; }
+    string ToString() const;
+};
+
 struct ExpressionNode
 {
     NodeKind kind;
@@ -295,8 +316,12 @@ struct ExpressionNode
     int     symbol;         // (V) Symbol found for Ident/Call/Field
     bool    isconst;        // (V)
     ConstValue constvalue;  // (V)
+    ConvertKind convert;    // (V) Implicit conversion of the result
+    int     fieldoffset;    // (V) NodeField, or NodeIdent that is a field inside with
+    TempSlot withslot;      // (V) NodeIdent that is a field inside with: slot with the record address
 public:
-    ExpressionNode() : kind(NodeNone), left(-1), right(-1), type(-1), symbol(-1), isconst(false) {}
+    ExpressionNode() : kind(NodeNone), left(-1), right(-1), type(-1), symbol(-1), isconst(false),
+        convert(ConvertNone), fieldoffset(-1) {}
 };
 
 struct ExpressionModel
@@ -309,6 +334,7 @@ public:
     int  AddNode(const ExpressionNode& node);
     string ToString() const;  // Fully parenthesized text, for dumps
     string NodeToString(int index) const;
+    string NodeToStringPlain(int index) const;
 };
 
 struct CaseLabelModel       // Case label or variant label: from or from..to
@@ -349,8 +375,10 @@ struct RecordPartModel
     Token   tagname;        // TokenTypeNone if there is no tag field
     int     tagtype;        // TypeModel index of the tag
     std::vector<VariantModel> variants;
+    int     tagoffset;      // (V) Offset of the tag field
+    int     size;           // (V) Size of this part including the variants
 public:
-    RecordPartModel() : hasvariant(false), tagtype(-1) {}
+    RecordPartModel() : hasvariant(false), tagtype(-1), tagoffset(0), size(0) {}
     string ToString() const;
 };
 
@@ -386,7 +414,7 @@ struct TypeModel
     ExpressionModel lowexpr;    // Subrange
     ExpressionModel highexpr;   // Subrange, string length
     int     indextype;      // Array index type
-    int     elemtype;       // Array element, set base, file component
+    int     elemtype;       // Array element, set base, file component; (V) subrange base type
     RecordPartModel record;
     int     resolved;       // (V) TypeKindName: the real type
     int64_t low, high;      // (V) Bounds, string length
@@ -440,8 +468,12 @@ struct StatementModel
     std::vector<ExpressionModel> withvars;
     Token   gotolabel;
     std::vector<InlineItemModel> inlineitems;
+    TempSlot forlimit;      // (V) For: slot for the final value
+    std::vector<TempSlot> withslots;  // (V) With: slots for the record addresses
+    int     labelsymbol;    // (V) Symbol of the label before the statement
+    int     gotosymbol;     // (V) Goto: symbol of the label
 public:
-    StatementModel() : kind(StmtEmpty), downto(false) {}
+    StatementModel() : kind(StmtEmpty), downto(false), labelsymbol(-1), gotosymbol(-1) {}
 };
 
 enum DeclarationKind
@@ -459,6 +491,7 @@ struct DeclarationModel
     StructConstModel initvalue;   // DeclTypedConst
     ExpressionModel absolute;     // DeclVar with absolute
     int     procindex;      // DeclProcedure
+    std::vector<int> symbols;   // (V) Symbols declared here
 public:
     DeclarationModel() : kind(DeclNone), type(-1), procindex(-1) {}
 };
@@ -477,8 +510,9 @@ struct ParamGroupModel      // One group like "var A, B: T"
     bool    isvar;
     std::vector<Token> names;
     Token   typename_;      // TokenTypeNone for an untyped var parameter
+    int     paramtype;      // (V) TypeModel index, -1 for an untyped var parameter
 public:
-    ParamGroupModel() : isvar(false) {}
+    ParamGroupModel() : isvar(false), paramtype(-1) {}
 };
 
 struct ProcedureModel
@@ -492,8 +526,72 @@ struct ProcedureModel
     ProcedureDirective directive;
     ExpressionModel external;   // external address
     BlockModel block;
+    int     symbol;         // (V)
+    int     scope;          // (V) Scope with the parameters and the locals
+    int     forwardof;      // (V) For the body of a forward procedure: its forward declaration
+    int     bodyproc;       // (V) For a forward declaration: the procedure with the body
+    int     resulttypeindex;    // (V) Function result type
+    int     resultsymbol;   // (V) Function result variable
+    int     paramsize;      // (V) Bytes the procedure pops on return
+    int     localsize;      // (V) Bytes for the locals and temporaries
+    bool    nested;         // (V) Gets the static link: level 2 and deeper
+    string  asmlabel;       // (V) "P00012"
 public:
-    ProcedureModel() : kind(ProcKindProcedure), parent(-1), level(0), directive(ProcDirNone) {}
+    ProcedureModel() : kind(ProcKindProcedure), parent(-1), level(0), directive(ProcDirNone),
+        symbol(-1), scope(-1), forwardof(-1), bodyproc(-1), resulttypeindex(-1), resultsymbol(-1),
+        paramsize(0), localsize(0), nested(false) {}
+};
+
+enum SymbolKind
+{
+    SymNone = 0,
+    SymConst,               // Constant, also enumeration value
+    SymTypedConst,          // Typed constant: initialized static variable
+    SymType,
+    SymVar,
+    SymParam,               // Value parameter
+    SymVarParam,            // var parameter
+    SymFuncResult,          // Result variable of a function
+    SymProcedure,
+    SymFunction,
+    SymLabel,
+    SymStdProc,             // Standard procedure, stdindex is StdRoutine
+    SymStdFunc,             // Standard function
+    SymStdVar,              // Standard variable: Input, Mem, HeapPtr...
+};
+
+struct SymbolModel
+{
+    string  name;           // Source spelling
+    SourcePos pos;
+    SymbolKind kind;
+    int     type;           // TypeModel index
+    int     scope;
+    int     level;          // Procedure level where declared
+    ConstValue constvalue;  // SymConst
+    int     procindex;      // SymProcedure, SymFunction, SymFuncResult
+    int     stdindex;       // SymStd*: StdRoutine or StdVariable
+    bool    unsupported;    // Standard identifier not supported in Pesto/11
+    TempSlot location;      // Variables and parameters
+    int     paramoffset;    // Structured value parameter: offset of the passed address
+    bool    indirect;       // The location holds the address: var parameter, string function result
+    int     absolutesym;    // absolute over this variable symbol, -1 if none
+    int64_t absoluteaddr;   // absolute address, -1 if none
+    bool    labeldefined;   // SymLabel: placed before a statement
+    bool    forwarded;      // SymProcedure/SymFunction: declared forward, body not seen yet
+public:
+    SymbolModel() : kind(SymNone), type(-1), scope(-1), level(0), procindex(-1), stdindex(-1),
+        unsupported(false), paramoffset(0), indirect(false), absolutesym(-1), absoluteaddr(-1),
+        labeldefined(false), forwarded(false) {}
+};
+
+struct ScopeModel
+{
+    int     parent;         // Enclosing scope, -1 for the standard scope
+    int     procindex;      // Owner procedure, -1 for the standard scope
+    std::map<string, int> names;  // Upper-case name -> symbol index
+public:
+    ScopeModel() : parent(-1), procindex(-1) {}
 };
 
 struct ProgramModel
@@ -502,6 +600,8 @@ struct ProgramModel
     std::vector<Token> params;  // Program parameters, ignored
     std::vector<TypeModel> types;
     std::vector<ProcedureModel> procedures;  // [0] is the program itself
+    std::vector<SymbolModel> symbols;   // (V)
+    std::vector<ScopeModel> scopes;     // (V) [0] standard identifiers, [1] the program
 public:
     int  AddType(const TypeModel& type);
     string TypeToString(int index) const;  // Type text, for dumps
@@ -587,6 +687,170 @@ private:
     int  ParseStringLiteral(ExpressionModel& expr);
     int  ParseSetConstructor(ExpressionModel& expr);
     void ParseArguments(ExpressionModel& expr, int node, bool allowformat);
+};
+
+
+//////////////////////////////////////////////////////////////////////
+// Validator, see validator*.cpp and docs/DESIGN.md section 4.10
+
+// Standard types, created by the validator; indices in g_program.types
+extern int g_typeInteger, g_typeByte, g_typeBoolean, g_typeChar, g_typeReal, g_typeText;
+extern int g_typeString;    // String expression result, string[255]
+extern int g_typeUntypedFile;
+extern int g_typeNilPointer;    // nil and Ptr(): compatible with all pointer types
+extern int g_typeEmptySet;      // []: compatible with all set types
+extern int g_typeError;         // Result of an expression with an error, checks are skipped
+extern int g_typeVoid;          // "Result" of a procedure call
+
+extern bool g_showvalidation;   // -v mode: dumps show the validation results
+
+class Validator;
+struct StdRoutineSpec;
+typedef int (Validator::* StdCheckMethodRef)(ExpressionModel&, int, const StdRoutineSpec&);
+struct StdRoutineSpec
+{
+    const char* name;
+    SymbolKind  kind;       // SymStdProc or SymStdFunc; SymNone for an unsupported one
+    const char* params;     // Parameter pattern, see validator-std.cpp
+    char        result;     // Result type code, see validator-std.cpp
+    StdCheckMethodRef method;   // Special check, nullptr for the pattern check
+};
+
+struct WithEntry            // Record opened by a with statement
+{
+    int     type;           // Record type
+    TempSlot slot;          // Slot with the record address
+};
+
+class Validator
+{
+    int     m_procindex;    // Procedure being validated
+    int     m_scope;        // Current scope
+    int     m_localoffset;  // Next free negative offset in the current frame
+    int     m_globalcount;  // Counter for V labels
+    int     m_constcount;   // Counter for C labels
+    int     m_proccount;    // Counter for P labels
+    std::vector<WithEntry> m_withs;
+    bool    m_assigntarget; // Validating the left side of an assignment: function name is the result variable
+    std::vector<int> m_pendingpointers;  // Pointer types waiting for their target type
+    std::set<int> m_validatedtypes;
+    std::map<int, int> m_settypes;       // Ordinal base type -> set type for set constructors
+    struct GotoRef { int symbol; SourcePos pos; };
+    std::vector<GotoRef> m_gotos;        // Gotos of the current block, checked at its end
+public:
+    Validator();
+public:
+    void ValidateProgram();
+public:
+    static const StdRoutineSpec m_stdroutines[];
+private:
+    // Scopes and symbols, validator.cpp
+    void CreateStandardScope();
+    int  AddType(const TypeModel& type);
+    int  AddSymbol(const SymbolModel& symbol, int scope);
+    int  DeclareSymbol(const Token& name, SymbolKind kind, int type);
+    int  FindSymbol(const string& name) const;
+    int  FindSymbolInScope(const string& name, int scope) const;
+    void Error(const SourcePos& pos, int code, const string& message);
+    // Blocks and declarations
+    void ValidateBlock(BlockModel& block);
+    void ValidateDeclaration(DeclarationModel& decl);
+    void ValidateConstDecl(DeclarationModel& decl);
+    void ValidateTypedConstDecl(DeclarationModel& decl);
+    void ValidateTypeDecl(DeclarationModel& decl);
+    void ValidateVarDecl(DeclarationModel& decl);
+    void ValidateLabelDecl(DeclarationModel& decl);
+    void ValidateProcedureDecl(DeclarationModel& decl);
+    void ValidateProcedureBody(int procindex);
+    void ResolvePendingPointers();
+    void CheckStructConst(StructConstModel& value, int type);
+    TempSlot AllocateGlobal(int size, bool isconst);
+    TempSlot AllocateLocal(int size);
+    TempSlot AllocateTemp(int size);
+    // Types
+public:
+    static int  Resolve(int type);
+    static const TypeModel& GetType(int type) { return g_program.types[Resolve(type)]; }
+    static bool IsOrdinal(int type);
+    static bool IsIntegerType(int type);
+    static bool IsRealType(int type);
+    static bool IsNumeric(int type) { return IsIntegerType(type) || IsRealType(type); }
+    static bool IsCharType(int type);
+    static bool IsBooleanType(int type);
+    static bool IsStringType(int type);
+    static bool IsCharArray(int type);
+    static bool IsStringLike(int type);
+    static bool IsSetType(int type);
+    static bool IsPointerType(int type);
+    static bool IsFileType(int type);
+    static bool IsTextType(int type);
+    static bool IsRecordType(int type);
+    static bool IsArrayType(int type);
+    static int  OrdinalBase(int type);
+    static bool OrdinalCompatible(int a, int b);
+    static bool SetCompatible(int a, int b);
+    static bool PointerCompatible(int a, int b);
+    static int  TypeSize(int type);
+    static bool ContainsFile(int type);
+private:
+    void ValidateType(int type);
+    void ValidateRecordPart(RecordPartModel& part, int& offset, int& align);
+    bool GetOrdinalRange(int type, int64_t& low, int64_t& high);
+    void ComputeTypeLayout(TypeModel& type);
+    int  ResolveTypeName(const Token& name);
+    // Expressions, validator-expr.cpp
+public:
+    int  ValidateExpression(ExpressionModel& expr);
+    int  ValidateNode(ExpressionModel& expr, int index, bool negated = false);
+    bool EvaluateConstant(ExpressionModel& expr, ConstValue& value, int& type);
+    bool IsVariable(const ExpressionModel& expr, int index) const;
+    bool CheckAssignable(int desttype, ExpressionModel& expr, int index, const SourcePos& pos, bool report);
+    void SetConvert(ExpressionModel& expr, int index, ConvertKind convert);
+private:
+    int  ValidateIdent(ExpressionModel& expr, int index);
+    int  ValidateCall(ExpressionModel& expr, int index);
+    int  ValidateUserCall(ExpressionModel& expr, int index, int symbol);
+    int  ValidateTypeCast(ExpressionModel& expr, int index, int symbol);
+    int  ValidateIndex(ExpressionModel& expr, int index);
+    int  ValidateField(ExpressionModel& expr, int index);
+    int  ValidateDeref(ExpressionModel& expr, int index);
+    int  ValidateUnary(ExpressionModel& expr, int index, bool negated);
+    int  ValidateBinary(ExpressionModel& expr, int index);
+    int  ValidateSet(ExpressionModel& expr, int index);
+    bool FindField(int recordtype, const string& name, int& offset, int& type) const;
+    int  ValidateValue(ExpressionModel& expr, int index, bool negated = false);
+    int  GetSetType(int basetype);
+    void CheckNoFormat(ExpressionModel& expr, int index);
+    // Standard routines, validator-std.cpp
+    int  ValidateStdCall(ExpressionModel& expr, int index, int symbol);
+    int  CheckStdPattern(ExpressionModel& expr, int index, const StdRoutineSpec& spec);
+    bool CheckStdArg(ExpressionModel& expr, const ArgModel& arg, char code);
+    int  StdResultType(char code, ExpressionModel& expr, int index);
+    int  CheckStdWrite(ExpressionModel& expr, int index, const StdRoutineSpec& spec);
+    int  CheckStdRead(ExpressionModel& expr, int index, const StdRoutineSpec& spec);
+    int  CheckStdStr(ExpressionModel& expr, int index, const StdRoutineSpec& spec);
+    int  CheckStdVal(ExpressionModel& expr, int index, const StdRoutineSpec& spec);
+    int  CheckStdConcat(ExpressionModel& expr, int index, const StdRoutineSpec& spec);
+    int  CheckStdSizeOf(ExpressionModel& expr, int index, const StdRoutineSpec& spec);
+    int  CheckStdAddr(ExpressionModel& expr, int index, const StdRoutineSpec& spec);
+    int  CheckStdOrd(ExpressionModel& expr, int index, const StdRoutineSpec& spec);
+    int  CheckStdSuccPred(ExpressionModel& expr, int index, const StdRoutineSpec& spec);
+    int  CheckStdAbsSqr(ExpressionModel& expr, int index, const StdRoutineSpec& spec);
+    int  CheckStdRandom(ExpressionModel& expr, int index, const StdRoutineSpec& spec);
+    int  CheckStdFileFunc(ExpressionModel& expr, int index, const StdRoutineSpec& spec);
+    int  CheckStdChr(ExpressionModel& expr, int index, const StdRoutineSpec& spec);
+    // Statements, validator.cpp
+    void ValidateStatement(StatementModel& statement);
+    void ValidateStatements(std::vector<StatementModel>& statements);
+    void ValidateAssign(StatementModel& statement);
+    void ValidateCallStatement(StatementModel& statement);
+    void ValidateCondition(ExpressionModel& expr, const SourcePos& pos);
+    void ValidateFor(StatementModel& statement);
+    void ValidateCase(StatementModel& statement);
+    void ValidateWith(StatementModel& statement);
+    void ValidateGoto(StatementModel& statement);
+    void ValidateInline(StatementModel& statement);
+    void ValidateLabelPlacement(StatementModel& statement);
 };
 
 

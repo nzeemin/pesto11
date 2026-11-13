@@ -1,0 +1,46 @@
+-q -v
+----------------------------------------------------------------------
+label 5;
+const
+  Bad = 32768;
+  A = 1;
+  A = 2;
+type
+  R1 = 10..1;
+  R2 = 1.5..2.5;
+  S0 = string[0];
+  SI = set of Integer;
+  T1 = Unknown;
+  T2 = A;
+  FF = file of Text;
+  PX = ^Missing;
+  Dup = record X: Integer; X: Char end;
+var V1, V2: Byte absolute $80;
+type PI = ^Integer;
+const TC: PI = 0;
+procedure Fwd; forward;
+function NoType: Integer; forward;
+procedure Ovl; begin end;
+overlay procedure O; begin end;
+procedure PF(F: Text); begin end;
+function FR(X: Integer): Rec1; begin end;
+begin end.
+----------------------------------------------------------------------
+TEST.PAS(3,9): error 56: Error in integer constant: 32768 is out of range -32768..32767
+TEST.PAS(5,3): error 43: Duplicate identifier or label: A
+TEST.PAS(7,8): error 52: Lower bound > upper bound
+TEST.PAS(8,8): error 51: Invalid subrange base type
+TEST.PAS(9,8): error 49: Invalid string length, must be 1..255
+TEST.PAS(10,8): error 70: Set base type out of range, must be within 0..255
+TEST.PAS(11,8): error 41: Unknown identifier: Unknown
+TEST.PAS(12,8): error 36: Type identifier expected: A
+TEST.PAS(13,8): error 68: File components may not be files
+TEST.PAS(15,28): error 43: Duplicate identifier: X
+TEST.PAS(14,9): error 42: Undefined pointer type in preceding type definitions: Missing
+TEST.PAS(16,5): error 75: Illegal use of ABSOLUTE: only one identifier is allowed
+TEST.PAS(18,7): error 61: Files and pointers are not allowed here
+TEST.PAS(22,19): error 200: Not supported in Pesto/11: OVERLAY
+TEST.PAS(23,17): error 67: Files must be VAR parameters
+TEST.PAS(24,26): error 41: Unknown identifier: Rec1
+TEST.PAS(19,11): error 73: Undefined FORWARD procedure: Fwd
+TEST.PAS(20,10): error 73: Undefined FORWARD procedure: NoType

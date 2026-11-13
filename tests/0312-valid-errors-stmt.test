@@ -1,0 +1,43 @@
+-q -v
+----------------------------------------------------------------------
+label 5, 6, 8;
+var I: Integer; R: Real; S: string[5]; C: Char;
+function F: Integer; begin F := 1 end;
+procedure Q; label 9; begin goto 5; 9: end;
+begin
+  if I then I := 0;
+  while S do ;
+  repeat until 1;
+  for R := 1 to 10 do ;
+  for I := 'a' to 'z' do ;
+  case I of 1: ; 'a': ; 1: ; 3..2: end;
+  case R of 1: end;
+  with I do ;
+  Copy(S, 1, 2);
+  F;
+  I;
+  goto 7;
+  goto 6;
+  5: ; 5: ;
+  F := 2
+end.
+----------------------------------------------------------------------
+TEST.PAS(4,34): error 72: Label not within current block: 5
+TEST.PAS(6,6): error 20: Boolean expression expected
+TEST.PAS(7,9): error 20: Boolean expression expected
+TEST.PAS(8,16): error 20: Boolean expression expected
+TEST.PAS(9,7): error 30: Simple type expected for the control variable
+TEST.PAS(10,12): error 44: Type mismatch
+TEST.PAS(10,19): error 44: Type mismatch
+TEST.PAS(11,18): error 46: Constant and CASE selector type does not match
+TEST.PAS(11,25): error: Duplicate case label
+TEST.PAS(11,30): error 52: Lower bound > upper bound
+TEST.PAS(12,8): error 30: Simple type expected for the case selector
+TEST.PAS(13,8): error 29: Record variable expected
+TEST.PAS(14,3): error: Procedure expected: Copy does not name a procedure
+TEST.PAS(15,3): error: Procedure expected: F does not name a procedure
+TEST.PAS(16,3): error: Procedure expected: I does not name a procedure
+TEST.PAS(17,8): error 40: Undefined label: 7
+TEST.PAS(19,8): error 43: Duplicate label: 5
+TEST.PAS(20,3): error 54: Illegal assignment: variable expected
+TEST.PAS(18,8): error 40: Undefined label: 6

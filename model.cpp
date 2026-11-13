@@ -1,5 +1,6 @@
 
 #include <cassert>
+#include <cstdio>
 
 #include "main.h"
 
@@ -92,10 +93,98 @@ string ExpressionModel::ToString() const
     return NodeToString(root);
 }
 
+// Folded constant value for -v dumps
+static string ConstValueToString(const ConstValue& value, int type);
+
+static string ConstToString(const ExpressionNode& node)
+{
+    return ConstValueToString(node.constvalue, node.type);
+}
+
+static string ConstValueToString(const ConstValue& constvalue, int type)
+{
+    struct { ConstValue constvalue; } node { constvalue };
+    if (Validator::IsRealType(type))
+    {
+        char buffer[32];
+        snprintf(buffer, sizeof(buffer), "%g", node.constvalue.dvalue);
+        string result = buffer;
+        if (result.find_first_of(".en") == string::npos)
+            result += ".0";
+        return result;
+    }
+    if (Validator::IsCharType(type))
+    {
+        Token token;
+        token.type = TokenTypeString;
+        token.svalue = string(1, (char)node.constvalue.ivalue);
+        return token.GetDisplayValue();
+    }
+    if (Validator::IsStringType(type))
+    {
+        Token token;
+        token.type = TokenTypeString;
+        token.svalue = node.constvalue.svalue;
+        return token.GetDisplayValue();
+    }
+    if (Validator::IsSetType(type))
+    {
+        string result = "[";
+        const string& bits = node.constvalue.svalue;
+        auto isset = [&bits](int i) { return bits.size() == 32 && (((unsigned char)bits[i / 8] >> (i % 8)) & 1); };
+        bool first = true;
+        for (int i = 0; i < 256; i++)
+        {
+            if (!isset(i))
+                continue;
+            int j = i;
+            while (j + 1 < 256 && isset(j + 1))
+                j++;
+            result += first ? "" : ", ";
+            result += std::to_string(i);
+            if (j > i)
+                result += ".." + std::to_string(j);
+            first = false;
+            i = j;
+        }
+        return result + "]";
+    }
+    if (Validator::IsPointerType(type))
+        return "nil";
+    if (Validator::IsBooleanType(type))
+        return node.constvalue.ivalue ? "True" : "False";
+    const TypeModel& model = Validator::GetType(Validator::OrdinalBase(type));
+    if (model.kind == TypeKindEnum && node.constvalue.ivalue >= 0 && node.constvalue.ivalue < (int64_t)model.enumnames.size())
+        return model.enumnames[(size_t)node.constvalue.ivalue].text;
+    return std::to_string(node.constvalue.ivalue);
+}
+
 string ExpressionModel::NodeToString(int index) const
 {
     if (index < 0 || index >= (int)nodes.size())
         return "?";
+    const ExpressionNode& node = nodes[index];
+    if (g_showvalidation)
+    {
+        string text;
+        bool literal = (node.kind == NodeInteger || node.kind == NodeReal || node.kind == NodeString || node.kind == NodeNil);
+        if (node.isconst && !literal && node.type >= 0)
+            text = ConstToString(node);
+        else
+            text = NodeToStringPlain(index);
+        switch (node.convert)
+        {
+        case ConvertIntToReal: return "ToReal(" + text + ")";
+        case ConvertCharToString:
+        case ConvertArrayToString: return "ToString(" + text + ")";
+        default: return text;
+        }
+    }
+    return NodeToStringPlain(index);
+}
+
+string ExpressionModel::NodeToStringPlain(int index) const
+{
     const ExpressionNode& node = nodes[index];
     string result;
     switch (node.kind)
@@ -261,6 +350,8 @@ string ProgramModel::TypeToString(int index) const
     case TypeKindSubrange:
         return type.lowexpr.ToString() + ".." + type.highexpr.ToString();
     case TypeKindString:
+        if (type.highexpr.IsEmpty())
+            return "string[" + std::to_string(type.high) + "]";
         return "string[" + type.highexpr.ToString() + "]";
     case TypeKindArray:
         return result + "array[" + TypeToString(type.indextype) + "] of " + TypeToString(type.elemtype);
@@ -397,7 +488,7 @@ static void DumpStatement(std::ostream& out, const StatementModel& statement, in
 
 static void DumpBlock(std::ostream& out, const BlockModel& block, int indent);
 
-static void DumpProcedureHeading(std::ostream& out, const ProcedureModel& proc, int indent)
+static void DumpProcedureHeading(std::ostream& out, const ProcedureModel& proc, int indent, const string& info)
 {
     out << string(indent, ' ') << ((proc.kind == ProcKindFunction) ? "FUNCTION " : "PROCEDURE ") << proc.name.text;
     if (!proc.params.empty())
@@ -425,37 +516,92 @@ static void DumpProcedureHeading(std::ostream& out, const ProcedureModel& proc, 
     case ProcDirOverlay: out << " OVERLAY"; break;
     default: break;
     }
-    out << std::endl;
+    out << info << std::endl;
+}
+
+// Validation info for a declaration line in -v mode, like " {V00001, size 2}"
+static string GetDeclarationInfo(const DeclarationModel& decl)
+{
+    if (!g_showvalidation)
+        return "";
+    string result;
+    switch (decl.kind)
+    {
+    case DeclConst:
+        if (!decl.symbols.empty())
+        {
+            const SymbolModel& symbol = g_program.symbols[decl.symbols[0]];
+            result = g_program.TypeToString(symbol.type);
+            if (symbol.type != g_typeError)
+                result += " " + ConstValueToString(symbol.constvalue, symbol.type);
+        }
+        break;
+    case DeclTypedConst:
+    case DeclVar:
+        for (size_t i = 0; i < decl.symbols.size(); i++)
+        {
+            const SymbolModel& symbol = g_program.symbols[decl.symbols[i]];
+            if (i > 0)
+                result += ", ";
+            if (symbol.absolutesym >= 0)
+                result += "absolute " + g_program.symbols[symbol.absolutesym].name;
+            else if (symbol.absoluteaddr >= 0)
+                result += "absolute " + std::to_string(symbol.absoluteaddr);
+            else
+                result += symbol.location.ToString();
+        }
+        result += ", size " + std::to_string(Validator::TypeSize(decl.type));
+        break;
+    case DeclType:
+        result = "size " + std::to_string(Validator::TypeSize(decl.type));
+        break;
+    case DeclProcedure:
+        {
+            const ProcedureModel& proc = g_program.procedures[decl.procindex];
+            result = proc.asmlabel;
+            if (proc.directive == ProcDirNone || proc.directive == ProcDirOverlay)
+            {
+                result += ", params " + std::to_string(proc.paramsize) + ", locals " + std::to_string(proc.localsize);
+                if (proc.nested)
+                    result += ", static link";
+            }
+        }
+        break;
+    default:
+        return "";
+    }
+    return " {" + result + "}";
 }
 
 static void DumpDeclaration(std::ostream& out, const DeclarationModel& decl, int indent)
 {
     string pad(indent, ' ');
+    string info = GetDeclarationInfo(decl);
     switch (decl.kind)
     {
     case DeclLabel:
         out << pad << "LABEL " << JoinTokens(decl.names) << std::endl;
         break;
     case DeclConst:
-        out << pad << "CONST " << JoinTokens(decl.names) << " = " << decl.value.ToString() << std::endl;
+        out << pad << "CONST " << JoinTokens(decl.names) << " = " << decl.value.ToString() << info << std::endl;
         break;
     case DeclTypedConst:
         out << pad << "CONST " << JoinTokens(decl.names) << ": " << g_program.TypeToString(decl.type)
-            << " = " << decl.initvalue.ToString() << std::endl;
+            << " = " << decl.initvalue.ToString() << info << std::endl;
         break;
     case DeclType:
-        out << pad << "TYPE " << JoinTokens(decl.names) << " = " << g_program.TypeToString(decl.type) << std::endl;
+        out << pad << "TYPE " << JoinTokens(decl.names) << " = " << g_program.TypeToString(decl.type) << info << std::endl;
         break;
     case DeclVar:
         out << pad << "VAR " << JoinTokens(decl.names) << ": " << g_program.TypeToString(decl.type);
         if (!decl.absolute.IsEmpty())
             out << " ABSOLUTE " << decl.absolute.ToString();
-        out << std::endl;
+        out << info << std::endl;
         break;
     case DeclProcedure:
         {
             const ProcedureModel& proc = g_program.procedures[decl.procindex];
-            DumpProcedureHeading(out, proc, indent);
+            DumpProcedureHeading(out, proc, indent, info);
             if (proc.directive == ProcDirNone || proc.directive == ProcDirOverlay)
                 DumpBlock(out, proc.block, indent + 2);
         }

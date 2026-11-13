@@ -272,8 +272,20 @@ static void ProcessFiles()
         return;
     }
 
-    //TODO: Validator, Generator, RuntimeGenerator
-    ReportError("not implemented yet: validator");
+    Validator validator;
+    validator.ValidateProgram();
+    if (GetErrorCount() > 0)
+        return;
+
+    if (g_validationonly)
+    {
+        g_showvalidation = true;
+        g_program.Dump(std::cout);
+        return;
+    }
+
+    //TODO: Generator, RuntimeGenerator
+    ReportError("not implemented yet: generator");
 }
 
 

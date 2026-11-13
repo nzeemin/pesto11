@@ -1,0 +1,40 @@
+-q -v
+----------------------------------------------------------------------
+function Odd2(N: Integer): Boolean; forward;
+function Even2(N: Integer): Boolean;
+begin if N = 0 then Even2 := True else Even2 := Odd2(N - 1) end;
+function Odd2;
+begin if N = 0 then Odd2 := False else Odd2 := Even2(N - 1) end;
+function Fact(N: Integer): Integer;
+begin if N <= 1 then Fact := 1 else Fact := N * Fact(N - 1) end;
+begin
+  if Odd2(3) then WriteLn(Fact(5))
+end.
+----------------------------------------------------------------------
+PROGRAM
+  FUNCTION Odd2(N: Integer): Boolean FORWARD {P00001}
+  FUNCTION Even2(N: Integer): Boolean {P00002, params 2, locals 2}
+    BEGIN
+      IF (N = 0)
+        THEN
+          ASSIGN Even2 := True
+        ELSE
+          ASSIGN Even2 := Odd2((N - 1))
+  FUNCTION Odd2(N: Integer): Boolean {P00001, params 2, locals 2}
+    BEGIN
+      IF (N = 0)
+        THEN
+          ASSIGN Odd2 := False
+        ELSE
+          ASSIGN Odd2 := Even2((N - 1))
+  FUNCTION Fact(N: Integer): Integer {P00003, params 2, locals 2}
+    BEGIN
+      IF (N <= 1)
+        THEN
+          ASSIGN Fact := 1
+        ELSE
+          ASSIGN Fact := (N * Fact((N - 1)))
+  BEGIN
+    IF Odd2(3)
+      THEN
+        CALL WriteLn(Fact(5))

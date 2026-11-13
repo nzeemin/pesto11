@@ -1,0 +1,62 @@
+-q -v
+----------------------------------------------------------------------
+label 1, Done;
+type Rec = record X, Y: Integer; Inner: record Z: Char end end;
+var I: Integer; C: Char; R: Rec; P: ^Rec; A: array[1..2] of Rec;
+begin
+  1: for I := 1 to 10 do C := 'a';
+  for C := 'z' downto 'a' do ;
+  case I of 1, 2: ; 3..5: I := 0; else I := 1; I := 2 end;
+  case C of 'a'..'f', 'x': ; end;
+  with R, Inner do begin X := 1; Z := 'q' end;
+  with P^ do Y := X;
+  with A[I] do X := Y;
+  while I > 0 do I := I - 1;
+  repeat I := I + 1 until I >= 10;
+  if I = 0 then goto Done else goto 1;
+Done:
+end.
+----------------------------------------------------------------------
+PROGRAM
+  LABEL 1, Done
+  TYPE Rec = record X, Y: Integer; Inner: record Z: Char end end {size 6}
+  VAR I: Integer {V00001, size 2}
+  VAR C: Char {V00002, size 1}
+  VAR R: Rec {V00003, size 6}
+  VAR P: ^Rec {V00004, size 2}
+  VAR A: array[1..2] of Rec {V00005, size 12}
+  BEGIN
+    1: FOR I := 1 TO 10
+      ASSIGN C := 'a'
+    FOR C := 'z' DOWNTO 'a'
+      EMPTY
+    CASE I
+      1, 2:
+        EMPTY
+      3..5:
+        ASSIGN I := 0
+      ELSE
+        ASSIGN I := 1
+        ASSIGN I := 2
+    CASE C
+      'a'..'f', 'x':
+        EMPTY
+    WITH R, Inner
+      BEGIN
+        ASSIGN X := 1
+        ASSIGN Z := 'q'
+    WITH P^
+      ASSIGN Y := X
+    WITH A[I]
+      ASSIGN X := Y
+    WHILE (I > 0)
+      ASSIGN I := (I - 1)
+    REPEAT
+      ASSIGN I := (I + 1)
+    UNTIL (I >= 10)
+    IF (I = 0)
+      THEN
+        GOTO Done
+      ELSE
+        GOTO 1
+    Done: EMPTY

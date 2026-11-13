@@ -1,0 +1,56 @@
+-q -v
+----------------------------------------------------------------------
+var I: Integer; B: Boolean; S: string[10]; R: Real; Rc: record X: Integer end;
+function F(X: Integer): Integer; begin F := X end;
+procedure P(var V: Integer); begin end;
+begin
+  I := 'abc';
+  B := I + 1;
+  I := Q;
+  I := F;
+  I := F(1, 2);
+  P(5);
+  P(R);
+  I := R;
+  S := I;
+  R := I div R;
+  B := not S;
+  I := Rc.Y;
+  I := I^;
+  I := B[1];
+  I := 1 + P(I);
+  I := Integer(1.5);
+  B := S = I;
+  I := Length(I);
+  I := Ord(1.5);
+  Chain(S);
+  I := Port[1];
+  Write(I:5:2);
+  Write(Rc);
+  I := Abs(I, 1)
+end.
+----------------------------------------------------------------------
+TEST.PAS(5,3): error 44: Type mismatch: string[255] is not compatible with Integer
+TEST.PAS(6,3): error 44: Type mismatch: Integer is not compatible with Boolean
+TEST.PAS(7,8): error 41: Unknown identifier: Q
+TEST.PAS(8,8): error: Wrong number of parameters for F: expected 1, found 0
+TEST.PAS(9,8): error: Wrong number of parameters for F: expected 1, found 2
+TEST.PAS(10,5): error: Variable expected for a VAR parameter
+TEST.PAS(11,5): error 44: Type mismatch: VAR parameter must be of the same type Integer
+TEST.PAS(12,3): error 44: Type mismatch: Real is not compatible with Integer
+TEST.PAS(13,3): error 44: Type mismatch: Integer is not compatible with string[10]
+TEST.PAS(14,10): error 47: Operand types do not match operator DIV: Integer, Real
+TEST.PAS(15,8): error 47: Operand type does not match operator NOT
+TEST.PAS(16,11): error 41: Unknown field: Y
+TEST.PAS(17,9): error 28: Pointer variable expected before ^
+TEST.PAS(18,9): error: Array or string expected before [
+TEST.PAS(19,12): error: Procedure call has no value: P
+TEST.PAS(20,8): error 44: Type cast is allowed only between scalar types except Real
+TEST.PAS(21,10): error 47: Operand types do not match operator =: string[10], Integer
+TEST.PAS(22,15): error 33: String expression expected
+TEST.PAS(23,12): error 30: Simple type or pointer expected
+TEST.PAS(24,3): error 200: Not supported in Pesto/11: Chain
+TEST.PAS(25,8): error 200: Not supported in Pesto/11: Port
+TEST.PAS(26,13): error: Decimals are allowed only for a Real value
+TEST.PAS(27,9): error 66: I/O not allowed here: record X: Integer end
+TEST.PAS(28,8): error: Wrong number of parameters for Abs

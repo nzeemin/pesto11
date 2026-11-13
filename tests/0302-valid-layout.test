@@ -1,0 +1,49 @@
+-q -v
+----------------------------------------------------------------------
+type Str = string[20];
+var G: Integer; GS: Str; GC: Char;
+procedure P(A: Integer; var B: Integer; C: Real; S: Str; var Any);
+  var L1: Char; L2: Integer; L3: Str;
+begin end;
+function FI(X: Integer): Integer;
+  var T: Integer;
+  procedure Inner(Y: Integer);
+    var Z: Integer;
+  begin Z := Y + T; FI := Z end;
+begin FI := X end;
+function FR(X: Real): Real; begin FR := X * 2 end;
+function FS(A: Str): Str; begin FS := A end;
+begin
+  G := FI(1); GS := FS('x'); G := Trunc(FR(1.5))
+end.
+----------------------------------------------------------------------
+PROGRAM
+  TYPE Str = string[20] {size 21}
+  VAR G: Integer {V00001, size 2}
+  VAR GS: Str {V00002, size 21}
+  VAR GC: Char {V00003, size 1}
+  PROCEDURE P(A: Integer; var B: Integer; C: Real; S: Str; var Any) {P00001, params 12, locals 48}
+    VAR L1: Char {-24(R5), size 1}
+    VAR L2: Integer {-26(R5), size 2}
+    VAR L3: Str {-48(R5), size 21}
+    BEGIN
+      EMPTY
+  FUNCTION FI(X: Integer): Integer {P00002, params 2, locals 4}
+    VAR T: Integer {-4(R5), size 2}
+    PROCEDURE Inner(Y: Integer) {P00003, params 2, locals 4, static link}
+      VAR Z: Integer {-4(R5), size 2}
+      BEGIN
+        ASSIGN Z := (Y + T)
+        ASSIGN FI := Z
+    BEGIN
+      ASSIGN FI := X
+  FUNCTION FR(X: Real): Real {P00004, params 4, locals 0}
+    BEGIN
+      ASSIGN FR := (X * ToReal(2))
+  FUNCTION FS(A: Str): Str {P00005, params 4, locals 22}
+    BEGIN
+      ASSIGN FS := A
+  BEGIN
+    ASSIGN G := FI(1)
+    ASSIGN GS := FS(ToString('x'))
+    ASSIGN G := Trunc(FR(1.5))
