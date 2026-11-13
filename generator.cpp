@@ -22,7 +22,7 @@ static string MakeLabel(char prefix, int number)
 
 Generator::Generator(FinalModel* final, const RuntimeGenerator* runtime) :
     m_final(final), m_runtime(runtime), m_code(nullptr), m_procindex(0),
-    m_labelcount(0), m_gotocount(0), m_stringcount(0), m_lastfile(-1), m_lastline(0)
+    m_labelcount(0), m_gotocount(0), m_stringcount(0), m_lastfile(-1), m_lastline(0), m_setrangetype(-1)
 {
     assert(final != nullptr);
     assert(runtime != nullptr);
@@ -161,6 +161,19 @@ string Generator::GetStringLabel(const string& bytes)
 }
 
 
+// Raw data (set images) are kept once each, word-aligned
+string Generator::GetDataLabel(const string& bytes)
+{
+    auto it = m_datas.find(bytes);
+    if (it != m_datas.end())
+        return it->second;
+    string label = MakeLabel('K', ++m_stringcount);
+    m_datas[bytes] = label;
+    m_datalist.push_back(std::make_pair(label, bytes));
+    return label;
+}
+
+
 //////////////////////////////////////////////////////////////////////
 // Program and procedures
 
@@ -203,7 +216,7 @@ void Generator::GenerateProcedure(int procindex)
     {
         if (!group.isvar && group.paramtype >= 0 && !Validator::IsScalar(group.paramtype) &&
             !Validator::IsArrayType(group.paramtype) && !Validator::IsRecordType(group.paramtype) &&
-            !Validator::IsStringType(group.paramtype))
+            !Validator::IsStringType(group.paramtype) && !Validator::IsSetType(group.paramtype))
             EmitTodo("value parameter of type " + g_program.TypeToString(group.paramtype));
     }
 
@@ -249,8 +262,20 @@ void Generator::GenerateProcedure(int procindex)
             EmitCall("STCP");
             continue;
         }
+        if (Validator::IsSetType(symbol.type))
+        {
+            // The caller passed an expanded 32-byte set: compress it into the copy
+            const TypeModel& model = Validator::GetType(symbol.type);
+            Emit("MOV", Operand::Index(5, symbol.paramoffset), Operand::Reg(0), "copy of " + symbol.name);
+            Emit("MOV", Operand::Reg(5), Operand::Reg(1));
+            Emit("SUB", Operand::Imm(-symbol.location.offset), Operand::Reg(1));
+            Emit("MOV", Operand::Imm(model.low / 8), Operand::Reg(2));
+            Emit("MOV", Operand::Imm(Validator::TypeSize(symbol.type)), Operand::Reg(3));
+            EmitCall("SETST");
+            continue;
+        }
         if (!Validator::IsArrayType(symbol.type) && !Validator::IsRecordType(symbol.type))
-            continue;  // Sets: step 6
+            continue;
         Emit("MOV", Operand::Index(5, symbol.paramoffset), Operand::Reg(3), "copy of " + symbol.name);
         Emit("MOV", Operand::Reg(5), Operand::Reg(4));
         Emit("SUB", Operand::Imm(-symbol.location.offset), Operand::Reg(4));
@@ -359,6 +384,14 @@ void Generator::CollectTempSlots(const StatementModel& statement, std::vector<Te
 void Generator::GenerateData()
 {
     std::vector<CodeLine>& data = m_final->data;
+
+    // Raw data: set images, each starts at an even address
+    for (const auto& item : m_datalist)
+    {
+        AddByteLines(data, item.first, item.second, "");
+        if (item.second.size() % 2 != 0)
+            data.push_back(MakeDataLine("", ".EVEN", ""));
+    }
 
     // String constants
     for (const auto& item : m_stringlist)

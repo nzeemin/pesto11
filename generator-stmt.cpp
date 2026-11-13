@@ -143,6 +143,8 @@ bool Generator::GenerateAssign(StatementModel& statement)
         (Validator::IsCharType(type) && Validator::IsStringType(valuenode.type) && valuenode.convert == ConvertNone) ||
         (Validator::IsCharArray(type) && valuenode.isconst && !Validator::IsCharArray(valuenode.type)))
         return GenerateStringAssign(statement);
+    if (Validator::IsSetType(type))
+        return GenerateSetAssign(statement);
     if (Validator::IsArrayType(type) || Validator::IsRecordType(type))
         return GenerateStructAssign(statement);
     if (!Validator::IsScalar(type))

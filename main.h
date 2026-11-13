@@ -962,15 +962,16 @@ public:
 //////////////////////////////////////////////////////////////////////
 // Generator, see generator*.cpp and docs/DESIGN.md section 4.11
 
-// Argument of a runtime call, loaded into a register by Generator::LoadRuntimeArgs
+// Argument of a runtime call, loaded into a register by Generator::LoadRuntimeArgs.
+// A set value is always passed expanded to 32 bytes: a constant image or a buffer.
 struct RuntimeArg
 {
-    enum Kind { StringValue, Address, Value, Immediate };
+    enum Kind { StringValue, SetValue, Address, Value, Immediate };
     Kind    kind;
     int     node;           // Expression node; for Value of a width -1 means "no width" (-1 loaded)
     int     reg;
     int64_t imm;            // Immediate
-    int     buffer;         // StringValue in a temporary buffer: its number, -1 if none
+    int     buffer;         // String or set value in a temporary buffer: its number, -1 if none
     const ExpressionModel* model;  // Expression of the node, if not the one given to LoadRuntimeArgs
 public:
     RuntimeArg(Kind k, int n, int r, int64_t i = 0) : kind(k), node(n), reg(r), imm(i), buffer(-1), model(nullptr) {}
@@ -987,10 +988,13 @@ class Generator
     std::map<int, string> m_gotolabels;     // Label symbol -> G label
     std::map<string, string> m_strings;     // String constant bytes -> K label
     std::vector<std::pair<string, string>> m_stringlist;  // K label and bytes, in creation order
+    std::map<string, string> m_datas;       // Raw data bytes (set images) -> K label
+    std::vector<std::pair<string, string>> m_datalist;    // K label and raw bytes, in creation order
     int     m_stringcount;
     int     m_lastfile, m_lastline;         // Last source line put into a comment
     string  m_exitlabel;                    // Epilogue of the procedure being generated, for Exit
     std::map<string, Operand> m_withstatic; // With slot -> record operand, when the record address is static
+    int     m_setrangetype;                 // Set type whose range checks constructor elements, -1: their own type
 public:
     Generator(FinalModel* final, const RuntimeGenerator* runtime);
 public:
@@ -1065,11 +1069,17 @@ private:
     bool GenerateStringBuffer(const ExpressionModel& expr, int index);
     bool AppendString(const ExpressionModel& expr, int index);
     bool LoadRuntimeArgs(const ExpressionModel& expr, std::vector<RuntimeArg>& args, int& buffers);
-    void FreeBuffers(int buffers);
+    void FreeBuffers(int bytes);
     bool GenerateStringAssign(StatementModel& statement);
     bool GenerateStringCompare(const ExpressionModel& expr, int index, const string& label, bool jumpiftrue);
     bool GenerateStringFunction(const string& name, const ExpressionModel& expr, int index);
     bool GenerateStringProcedure(const string& name, const ExpressionModel& expr, int index);
+    string GetDataLabel(const string& bytes);
+    // Sets, generator-set.cpp
+    bool GenerateSetBuffer(const ExpressionModel& expr, int index);
+    bool GenerateSetAssign(StatementModel& statement);
+    bool GenerateSetCompare(const ExpressionModel& expr, int index, const string& label, bool jumpiftrue);
+    bool GenerateSetIn(const ExpressionModel& expr, int index, const string& label, bool jumpiftrue);
     bool LoadWithWidth(const ExpressionModel& expr, const ArgModel& arg, bool isaddress);
 };
 

@@ -388,7 +388,7 @@ bool Generator::GenerateCondition(const ExpressionModel& expr, int index, const 
             return true;
         }
         if (op.IsKeyword(KeywordIN))
-            return GenerateInConst(expr, index, label, jumpiftrue);
+            return GenerateInConst(expr, index, label, jumpiftrue) || GenerateSetIn(expr, index, label, jumpiftrue);
         if (op.IsSymbol(SymbolEqual) || op.IsSymbol(SymbolNotEqual) || op.IsSymbol(SymbolLess) ||
             op.IsSymbol(SymbolGreater) || op.IsSymbol(SymbolLessEqual) || op.IsSymbol(SymbolGreaterEqual))
             return GenerateCompare(expr, index, label, jumpiftrue);
@@ -440,6 +440,8 @@ bool Generator::GenerateCompare(const ExpressionModel& expr, int index, const st
     const ExpressionNode& node = expr.nodes[index];
     const ExpressionNode& left = expr.nodes[node.left];
     const ExpressionNode& right = expr.nodes[node.right];
+    if (Validator::IsSetType(left.type) || Validator::IsSetType(right.type))
+        return GenerateSetCompare(expr, index, label, jumpiftrue);
     if (Validator::IsStringType(left.type) || Validator::IsStringType(right.type) ||
         left.convert == ConvertArrayToString || left.convert == ConvertCharToString ||
         right.convert == ConvertArrayToString || right.convert == ConvertCharToString)
@@ -493,7 +495,7 @@ bool Generator::GenerateInConst(const ExpressionModel& expr, int index, const st
     const ExpressionNode& node = expr.nodes[index];
     const ExpressionNode& setnode = expr.nodes[node.right];
     if (!setnode.isconst || setnode.constvalue.svalue.size() != 32)
-        return false;  // Set variables: step 6
+        return false;  // Set variables: GenerateSetIn
 
     // Ranges of consecutive elements of the constant set
     const string& bits = setnode.constvalue.svalue;
@@ -630,51 +632,68 @@ bool Generator::GenerateUserCall(const ExpressionModel& expr, int index)
     if (proc.kind == ProcKindFunction && !stringresult && !Validator::IsScalar(proc.resulttypeindex))
         return false;  // Real results: step 7
 
-    std::vector<bool> isvar, isstring;
+    std::vector<bool> isvar, isstring, isset;
     for (const ParamGroupModel& group : proc.params)
     {
         for (size_t i = 0; i < group.names.size(); i++)
         {
+            bool byvalue = !group.isvar && group.paramtype >= 0;
             isvar.push_back(group.isvar);
-            isstring.push_back(!group.isvar && group.paramtype >= 0 && Validator::IsStringType(group.paramtype));
+            isstring.push_back(byvalue && Validator::IsStringType(group.paramtype));
+            isset.push_back(byvalue && Validator::IsSetType(group.paramtype));
         }
     }
     if (isvar.size() != node.args.size())
         return false;
 
-    // A string result goes into a buffer reserved by the caller; string expressions passed by value
-    // are built in buffers before any parameter is pushed (DESIGN 7.6)
+    // A string result goes into a buffer reserved by the caller. String expressions and sets passed
+    // by value are built in buffers before any parameter is pushed (DESIGN 7.6); a set is always
+    // passed expanded to 32 bytes.
     if (stringresult)
         Emit("SUB", Operand::Imm(256), Operand::Reg(6), "buffer for the function result");
-    std::vector<int> buffer(node.args.size(), -1);
+    std::vector<int> bufsize(node.args.size(), 0);
     int buffers = 0;
     for (size_t i = 0; i < node.args.size(); i++)
     {
-        if (isstring[i] && !IsSimpleString(expr, node.args[i].node))
+        int arg = node.args[i].node;
+        if (isstring[i] && !IsSimpleString(expr, arg))
         {
-            if (!GenerateStringBuffer(expr, node.args[i].node))
+            if (!GenerateStringBuffer(expr, arg))
                 return false;
-            buffer[i] = buffers++;
+            bufsize[i] = 256;
         }
+        else if (isset[i] && !(expr.nodes[arg].isconst && expr.nodes[arg].constvalue.svalue.size() == 32))
+        {
+            if (!GenerateSetBuffer(expr, arg))
+                return false;
+            bufsize[i] = 32;
+        }
+        buffers += bufsize[i];
     }
     int pushed = 0;
     if (stringresult)
     {
         Emit("MOV", Operand::Reg(6), Operand::Reg(0));
         if (buffers > 0)
-            Emit("ADD", Operand::Imm(buffers * 256), Operand::Reg(0));
+            Emit("ADD", Operand::Imm(buffers), Operand::Reg(0));
         Emit("MOV", Operand::Reg(0), Operand::AutoDec(6), "result address");
         pushed += 2;
     }
     for (size_t i = 0; i < node.args.size(); i++)
     {
         int arg = node.args[i].node;
-        if (buffer[i] >= 0)
+        if (bufsize[i] > 0)
         {
+            int offset = pushed;
+            for (size_t j = i + 1; j < node.args.size(); j++)
+                offset += bufsize[j];
             Emit("MOV", Operand::Reg(6), Operand::Reg(0));
-            Emit("ADD", Operand::Imm(pushed + (buffers - 1 - buffer[i]) * 256), Operand::Reg(0));
-            Emit("MOV", Operand::Reg(0), Operand::AutoDec(6), "string buffer");
+            if (offset != 0)
+                Emit("ADD", Operand::Imm(offset), Operand::Reg(0));
+            Emit("MOV", Operand::Reg(0), Operand::AutoDec(6), "buffer");
         }
+        else if (isset[i])
+            Emit("MOV", Operand::ImmLabel(GetDataLabel(expr.nodes[arg].constvalue.svalue)), Operand::AutoDec(6), "set constant");
         else if (isstring[i] && expr.nodes[arg].isconst)
         {
             const ExpressionNode& argnode = expr.nodes[arg];

@@ -1,0 +1,98 @@
+-q
+------------------------------------------------------------
+program Sets;
+type
+  Color = (Red, Green, Blue, Cyan, Magenta, Yellow);
+  Colors = set of Color;
+  Letters = set of 'a'..'z';
+  CharSet = set of Char;
+  Small = set of 10..20;
+var
+  C, D: Colors;
+  L: Letters;
+  S, T: CharSet;
+  N: Small;
+  Ch: Char;
+  I, K: Integer;
+  X: Color;
+const
+  Vowels: Letters = ['a', 'e', 'i', 'o', 'u'];
+  Digits: CharSet = ['0'..'9'];
+
+function CountIn(St: CharSet): Integer;
+var Ch: Char; K: Integer;
+begin
+  K := 0;
+  for Ch := #0 to #255 do if Ch in St then K := K + 1;
+  CountIn := K
+end;
+
+procedure Show(Cs: Colors);
+var X: Color;
+begin
+  for X := Red to Yellow do if X in Cs then Write(Ord(X));
+  WriteLn
+end;
+
+procedure AddTo(var Cs: Colors; X: Color);
+begin
+  Cs := Cs + [X]
+end;
+
+begin
+  C := [Red, Blue];
+  D := [Green..Cyan];
+  Write('C+D='); Show(C + D);
+  Write('C*D='); Show(C * D);
+  Write('D-C='); Show(D - C);
+  X := Yellow;
+  AddTo(C, X);
+  Write('C='); Show(C);
+  WriteLn('in ', Blue in C, ' ', Green in C, ' ', Succ(X) in [], ' ', X in [Red..Yellow]);
+  WriteLn('cmp ', C = [Red, Blue, Yellow], ' ', C <> D, ' ', [Red] <= C, ' ', C >= [Blue, Green], ' ', C <= C + D);
+
+  L := ['a'..'f'] + Vowels;
+  K := 0;
+  for Ch := 'a' to 'z' do if Ch in L then K := K + 1;
+  WriteLn('L ', K, ' ', 'z' in L, ' ', 'e' in L, ' ', '0' in L);
+  S := Digits + L;
+  T := S;
+  WriteLn('S ', CountIn(S), ' ', CountIn(T - Digits), ' ', CountIn(Digits * ['5'..'z']), ' ', T = S, ' ', S = L);
+  WriteLn('mixed ', CountIn(L), ' ', L <= S, ' ', S <= L);
+
+  I := 15;
+  N := [I, 12, I + 2..I + 4];
+  K := 0;
+  for I := 0 to 30 do if I in N then Write(I, ' ');
+  WriteLn;
+  N := [];
+  WriteLn('empty ', N = [], ' ', 15 in N, ' ', CountIn([]));
+  I := 300;
+  S := [Chr(65), 'B'];
+  WriteLn('big ', I in [1..200], ' ', I in [], ' ', CountIn(S));
+  {$R+}
+  N := [11..13];
+  WriteLn('checked ', 12 in N);
+  I := 25;
+  N := [I];
+  WriteLn('never')
+end.
+------------------------------------------------------------
+------------------------------------------------------------
+------------------------------------------------------------
+C+D=0123
+C*D=2
+D-C=13
+C=025
+in TRUE FALSE FALSE TRUE
+cmp TRUE TRUE TRUE FALSE TRUE
+L 9 FALSE TRUE FALSE
+S 19 9 5 TRUE FALSE
+mixed 9 TRUE FALSE
+12 15 17 18 19
+empty TRUE FALSE 0
+big FALSE FALSE 2
+checked TRUE
+
+Run-time error 91, PC=005464
+Program aborted

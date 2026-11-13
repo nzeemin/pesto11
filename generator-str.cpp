@@ -68,21 +68,28 @@ bool Generator::LoadStringAddress(const ExpressionModel& expr, int index, int re
     return GenerateAddress(expr, index, reg);
 }
 
-void Generator::FreeBuffers(int buffers)
+void Generator::FreeBuffers(int bytes)
 {
-    if (buffers > 0)
-        Emit("ADD", Operand::Imm(buffers * STRING_BUFFER), Operand::Reg(6), "free the string buffers");
+    if (bytes > 0)
+        Emit("ADD", Operand::Imm(bytes), Operand::Reg(6), "free the buffers");
+}
+
+// Set value that needs no buffer: a constant, as its 32-byte image in the data
+static bool IsConstSet(const ExpressionModel& expr, int index)
+{
+    const ExpressionNode& node = expr.nodes[index];
+    return node.isconst && node.constvalue.svalue.size() == 32;
 }
 
 // Load the arguments of a runtime call into their registers:
-//  1. string values that are not simple are built in buffers, in order;
+//  1. string and set values that are not simple are built in buffers, in order;
 //  2. items that need code (addresses of computed variables, values of expressions) are computed and pushed;
 //  3. they are popped into their registers;
 //  4. the rest is loaded directly: constants, simple values, static addresses, buffer addresses.
-// The caller frees the buffers after the call.
+// The caller frees the buffers after the call; buffers gives their size in bytes.
 bool Generator::LoadRuntimeArgs(const ExpressionModel& mainexpr, std::vector<RuntimeArg>& args, int& buffers)
 {
-    buffers = 0;
+    std::vector<int> sizes;
     for (RuntimeArg& arg : args)
     {
         const ExpressionModel& expr = arg.model ? *arg.model : mainexpr;
@@ -90,9 +97,20 @@ bool Generator::LoadRuntimeArgs(const ExpressionModel& mainexpr, std::vector<Run
         {
             if (!GenerateStringBuffer(expr, arg.node))
                 return false;
-            arg.buffer = buffers++;
+            arg.buffer = (int)sizes.size();
+            sizes.push_back(STRING_BUFFER);
+        }
+        else if (arg.kind == RuntimeArg::SetValue && !IsConstSet(expr, arg.node))
+        {
+            if (!GenerateSetBuffer(expr, arg.node))
+                return false;
+            arg.buffer = (int)sizes.size();
+            sizes.push_back(32);
         }
     }
+    buffers = 0;
+    for (int size : sizes)
+        buffers += size;
 
     std::vector<size_t> pushed;
     for (size_t i = 0; i < args.size(); i++)
@@ -101,7 +119,7 @@ bool Generator::LoadRuntimeArgs(const ExpressionModel& mainexpr, std::vector<Run
         const ExpressionModel& expr = arg.model ? *arg.model : mainexpr;
         Operand operand;
         bool isbyte;
-        if (arg.buffer >= 0 || arg.kind == RuntimeArg::Immediate || arg.node < 0)
+        if (arg.buffer >= 0 || arg.kind == RuntimeArg::Immediate || arg.kind == RuntimeArg::SetValue || arg.node < 0)
             continue;
         const ExpressionNode& node = expr.nodes[arg.node];
         if ((arg.kind == RuntimeArg::StringValue && !node.isconst) || arg.kind == RuntimeArg::Address)
@@ -133,8 +151,10 @@ bool Generator::LoadRuntimeArgs(const ExpressionModel& mainexpr, std::vector<Run
         Operand reg = Operand::Reg(arg.reg);
         if (arg.buffer >= 0)
         {
-            Emit("MOV", Operand::Reg(6), reg, "string buffer");
-            int offset = (buffers - 1 - arg.buffer) * STRING_BUFFER;
+            Emit("MOV", Operand::Reg(6), reg, "buffer");
+            int offset = 0;
+            for (size_t j = (size_t)arg.buffer + 1; j < sizes.size(); j++)
+                offset += sizes[j];
             if (offset != 0)
                 Emit("ADD", Operand::Imm(offset), reg);
             continue;
@@ -152,6 +172,9 @@ bool Generator::LoadRuntimeArgs(const ExpressionModel& mainexpr, std::vector<Run
                 Emit("MOV", Operand::Imm(-1), reg, "no width");
             else
                 LoadOrdinal(expr, arg.node, arg.reg);
+            break;
+        case RuntimeArg::SetValue:
+            Emit("MOV", Operand::ImmLabel(GetDataLabel(expr.nodes[arg.node].constvalue.svalue)), reg, "set constant");
             break;
         case RuntimeArg::StringValue:
         case RuntimeArg::Address:
@@ -301,7 +324,7 @@ bool Generator::AppendString(const ExpressionModel& expr, int index)
     Emit("MOV", Operand::Reg(6), Operand::Reg(0));
     Emit("ADD", Operand::Imm(STRING_BUFFER), Operand::Reg(0));
     EmitCall("STCAT");
-    FreeBuffers(1);
+    FreeBuffers(STRING_BUFFER);
     return true;
 }
 
@@ -399,7 +422,7 @@ bool Generator::GenerateStringFunction(const string& name, const ExpressionModel
             return false;
         Emit("CLR", Operand::Reg(0));
         Emit("BISB", Operand::Deferred(6), Operand::Reg(0), "length byte");
-        FreeBuffers(1);
+        FreeBuffers(STRING_BUFFER);
         return true;
     }
     if (name == "Pos" && node.args.size() == 2)
