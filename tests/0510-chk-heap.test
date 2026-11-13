@@ -1,0 +1,71 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+type PNode = ^Node;
+  Node = record Value: Integer; Next: PNode end;
+  PInt = ^Integer;
+var Head, N, Mk: PNode; P, Q: PInt; I, K, W: Integer;
+procedure Push(V: Integer);
+var T: PNode;
+begin
+  New(T); T^.Value := V; T^.Next := Head; Head := T
+end;
+function Sum(L: PNode): Integer;
+begin
+  if L = nil then Sum := 0 else Sum := L^.Value + Sum(L^.Next)
+end;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('POINTERS');
+  New(P); P^ := 42; Q := P; Check(Q^ = 42, 1);
+  Q^ := 7; Check(P^ = 7, 2); Check(P = Q, 3);
+  Q := nil; Check(Q = nil, 4); Check(P <> nil, 5);
+  Group('LIST');
+  Head := nil;
+  for I := 1 to 10 do Push(I);
+  Check(Sum(Head) = 55, 1); Check(Head^.Value = 10, 2); Check(Head^.Next^.Value = 9, 3);
+  K := 0; N := Head; while N <> nil do begin K := K + 1; N := N^.Next end;
+  Check(K = 10, 4);
+  Group('DISPOSE');
+  W := MemAvail; New(N); Dispose(N); Check(MemAvail = W, 1);
+  New(N); New(P); Mk := N; Dispose(N); New(N); Check(N = Mk, 2);
+  Group('MARK RELEASE');
+  Mark(Mk); W := HeapPtr;
+  for I := 1 to 20 do Push(I);
+  Check(HeapPtr <> W, 1); Release(Mk); Check(HeapPtr = W, 2);
+  GetMem(P, 6); FreeMem(P, 6); Check(HeapPtr = W, 3);
+  Check(MaxAvail <> 0, 4);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+POINTERS     PASS   5
+LIST         PASS   4
+DISPOSE      PASS   2
+MARK RELEASE PASS   4
+TOTAL PASS 15 FAIL 0

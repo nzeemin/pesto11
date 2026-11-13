@@ -1,0 +1,81 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+var I, J, K, S, L: Integer; B: Byte; C: Char;
+label 1, 2;
+function Limit: Integer;
+begin
+  K := K + 1; Limit := 5
+end;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('FOR EDGES');
+  S := 0; for B := 5 downto 0 do S := S + 1; Check((S = 6) and (B = 0), 1);
+  S := 0; for B := 0 to 0 do S := S + 1; Check(S = 1, 2);
+  S := 0; for I := -32768 to -32766 do S := S + 1; Check(S = 3, 3);
+  S := 0; for I := -32766 downto -32768 do S := S + 1; Check(S = 3, 4);
+  S := 0; for C := #253 to #255 do S := S + 1; Check((S = 3) and (C = #255), 5);
+  K := 0; S := 0; for I := 1 to Limit do S := S + 1; Check((S = 5) and (K = 1), 6);
+  L := 3; S := 0; for I := 1 to L do begin L := 10; S := S + 1 end; Check(S = 3, 7);
+  S := 0; for I := 1 to 3 do for J := 1 to 3 do for K := 1 to 3 do S := S + 1; Check(S = 27, 8);
+  Group('WHILE REPEAT');
+  I := 0; J := 100;
+  while (I < 10) and (J > 95) do begin I := I + 1; J := J - 1 end;
+  Check((I = 5) and (J = 95), 1);
+  I := 0; repeat I := I + 1; if I = 3 then goto 1 until I > 10;
+1: Check(I = 3, 2);
+  S := 0; I := 10; while I > 0 do begin S := S + I; I := I - 3 end; Check(S = 22, 3);
+  I := 1; repeat I := I * 2 until (I > 100) or (I = 64); Check(I = 64, 4);
+  Group('CASE MORE');
+  S := 0;
+  for C := 'a' to 'z' do
+    case C of
+      'a', 'e', 'i', 'o', 'u': S := S + 100;
+      'x'..'z': S := S + 10
+    else S := S + 1
+    end;
+  Check(S = 500 + 30 + 18, 1);
+  S := 0;
+  for B := 250 to 255 do case B of 250..252: S := S + 1; 255: S := S + 10 end;
+  Check(S = 13, 2);
+  I := -5; case I of -10..-1: S := 1; 0: S := 2 else S := 3 end; Check(S = 1, 3);
+  S := 0;
+  for I := 1 to 3 do
+    case I of
+      1: begin S := S + 1; if S > 0 then goto 2 end;
+      2: S := S + 10
+    end;
+2: Check(S = 1, 4);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+FOR EDGES    PASS   8
+WHILE REPEAT PASS   4
+CASE MORE    PASS   4
+TOTAL PASS 16 FAIL 0

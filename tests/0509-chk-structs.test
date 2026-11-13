@@ -1,0 +1,79 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+type Color = (Red, Green, Blue);
+  Pt = record X, Y: Integer end;
+  Shape = record
+    Name: Char;
+    case Kind: Byte of
+      0: (R: Integer);
+      1: (W, H: Integer)
+  end;
+  Grid = array[1..3, 'a'..'c'] of Byte;
+var M: array[Color] of Integer; G: Grid; P, Q: Pt; Ps: array[1..3] of Pt;
+  Sh: Shape; I, J, K: Integer; Ch: Char; W: Integer; WLo: Byte absolute W;
+const
+  Tab: array[1..4] of Integer = (10, -20, 30, -40);
+  Org: Pt = (X: 5; Y: -6);
+  Word3: array[1..3] of Char = 'xyz';
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('ARRAYS');
+  M[Red] := 1; M[Green] := 2; M[Blue] := 3; Check(M[Green] + M[Blue] = 5, 1);
+  for I := 1 to 3 do for Ch := 'a' to 'c' do G[I, Ch] := I * 10 + Ord(Ch) - 96;
+  Check(G[2, 'b'] = 22, 1); Check(G[3]['c'] = 33, 3);
+  K := 0; for I := 1 to 4 do K := K + Tab[I]; Check(K = -20, 4);
+  I := 2; J := 3; Check(Tab[I] + Tab[J] = 10, 5); Check(Tab[I * 2] = -40, 6);
+  Check(Word3[2] = 'y', 7);
+  Group('RECORDS');
+  P := Org; Check((P.X = 5) and (P.Y = -6), 1);
+  Q := P; Q.X := 7; Check((P.X = 5) and (Q.X = 7), 2);
+  for I := 1 to 3 do begin Ps[I].X := I; Ps[I].Y := -I end;
+  Check(Ps[2].X - Ps[3].Y = 5, 3);
+  Sh.Kind := 1; Sh.W := 3; Sh.H := 4; Check(Sh.W * Sh.H = 12, 4); Check(Sh.R = 3, 5);
+  Check(SizeOf(Pt) = 4, 6); Check(SizeOf(Grid) = 9, 7); Check(SizeOf(Shape) = 6, 8);
+  Group('WITH');
+  with P do begin X := 1; Y := 2 end; Check(P.X + P.Y = 3, 1);
+  for I := 1 to 3 do with Ps[I] do X := X * 10;
+  Check(Ps[3].X = 30, 2);
+  with Ps[1], Sh do begin Y := R; Name := 'q' end; Check((Ps[1].Y = 3) and (Sh.Name = 'q'), 3);
+  Group('MEMORY');
+  W := $1234; Check(WLo = $34, 1); Check(Mem[Addr(W)] = $34, 2); Check(Mem[Addr(W) + 1] = $12, 3);
+  Check(MemW[Addr(W)] = $1234, 4); MemW[Addr(W)] := 7; Check(W = 7, 5);
+  Mem[Addr(W)] := 9; Check(W = 9, 6);
+  FillChar(G, SizeOf(G), 5); Check(G[3, 'c'] = 5, 7);
+  P.X := 11; P.Y := 22; Move(P, Q, SizeOf(Pt)); Check(Q.Y = 22, 8);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+ARRAYS       PASS   7
+RECORDS      PASS   8
+WITH         PASS   3
+MEMORY       PASS   8
+TOTAL PASS 26 FAIL 0

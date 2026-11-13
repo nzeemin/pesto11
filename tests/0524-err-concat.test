@@ -1,0 +1,15 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+var S: string[200]; T: string[100];
+begin
+  FillChar(S, 201, 'a'); S[0] := Chr(200);
+  FillChar(T, 101, 'b'); T[0] := Chr(100);
+  WriteLn('before');
+  S := S + T;
+  WriteLn('never')
+end.
+=== SCREEN EXPECTED ===================================================
+before
+
+Run-time error 10, PC=001142
+Program aborted

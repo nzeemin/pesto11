@@ -1,0 +1,73 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+type Color = (Red, Green, Blue, Cyan, Magenta, Yellow);
+  Colors = set of Color;
+  Small = set of 10..20;
+  CharSet = set of Char;
+var C, D: Colors; N: Small; S, T: CharSet; Ch: Char; I: Integer; K: Color;
+function Count(X: CharSet): Integer;
+var Ch: Char; K: Integer;
+begin
+  K := 0;
+  for Ch := #0 to #255 do if Ch in X then K := K + 1;
+  Count := K
+end;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('OPS');
+  C := [Red, Blue]; D := [Green..Cyan];
+  Check(C + D = [Red..Cyan], 1); Check(C * D = [Blue], 2); Check(D - C = [Green, Cyan], 3);
+  Check(C - C = [], 4); Check(C * [] = [], 5); Check([] + C = C, 6);
+  K := Yellow; C := C + [K]; Check(C = [Red, Blue, Yellow], 7);
+  Group('COMPARE');
+  Check([Red] <= C, 1); Check(not (C <= [Red]), 2); Check(C >= [Blue, Yellow], 3);
+  Check(C <> D, 4); Check([] <= D, 5); Check(C = C, 6);
+  Group('IN');
+  Check(Blue in C, 1); Check(not (Green in C), 2);
+  I := 15; N := [10, I, 18..20];
+  Check(15 in N, 3); Check(19 in N, 4); Check(not (11 in N), 5);
+  I := 300; Check(not (I in N), 6); Check(not (I in [1..200]), 7);
+  Ch := 'q'; Check(Ch in ['a'..'z'], 8);
+  Check(Ch in ['a', 'e', 'i', 'k'..'m', 'o', 'q', 's', 'u'..'w', 'y'], 9);
+  Group('CHARSET');
+  S := ['0'..'9', 'A'..'F']; Check(Count(S) = 16, 1);
+  T := S - ['A'..'Z']; Check(Count(T) = 10, 2);
+  Check(Count([]) = 0, 3);
+  S := []; for Ch := 'a' to 'e' do S := S + [Ch]; Check(Count(S) = 5, 4);
+  Check(['a'..'c'] <= S, 5);
+  N := [12..14]; Check(N * [13..20] = [13, 14], 6);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+OPS          PASS   7
+COMPARE      PASS   6
+IN           PASS   9
+CHARSET      PASS   6
+TOTAL PASS 28 FAIL 0

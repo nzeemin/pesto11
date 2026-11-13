@@ -1,0 +1,81 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+var S, T: string[20]; Sh: string[3]; C: Char; I, Code: Integer;
+  A: array[1..3] of Char;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('ASSIGN CAT');
+  S := 'abc'; Check(Length(S) = 3, 1);
+  S := ''; Check(Length(S) = 0, 2);
+  Sh := 'abcdef'; Check(Sh = 'abc', 3);
+  S := 'ab'; T := S + 'cd' + S; Check(T = 'abcdab', 4);
+  C := 'z'; S := C; Check((S = 'z') and (Length(S) = 1), 5);
+  S := S + C + C; Check(S = 'zzz', 6);
+  Check(Concat('a', 'bc', 'd') = 'abcd', 7);
+  S := '12345678901234567890'; T := S + 'xyz'; Check(Length(T) = 20, 8);
+  Group('COMPARE');
+  Check('abc' < 'abd', 1); Check('ab' < 'abc', 2); Check('b' > 'abc', 3);
+  Check('' < 'a', 4); Check('abc' = 'abc', 5); Check('abc' <> 'abC', 6);
+  S := 'x'; Check(S = 'x', 7); C := 'x'; Check(S = C, 8);
+  A := 'abc'; Check(A = 'abc', 9);
+  Group('COPY POS');
+  S := 'Hello, world';
+  Check(Copy(S, 1, 5) = 'Hello', 1); Check(Copy(S, 8, 100) = 'world', 2);
+  Check(Copy(S, 13, 2) = '', 3); Check(Copy(S, 30, 2) = '', 4); Check(Copy(S, 5, 0) = '', 5);
+  Check(Pos('world', S) = 8, 6); Check(Pos('z', S) = 0, 7); Check(Pos('', S) = 0, 8);
+  Check(Pos('l', S) = 3, 9); Check(Length(Copy(S, 3, 4)) = 4, 10);
+  Group('INS DEL');
+  S := '0123456789'; Delete(S, 3, 4); Check(S = '016789', 1);
+  Delete(S, 5, 100); Check(S = '0167', 2);
+  Delete(S, 10, 1); Check(S = '0167', 3);
+  Insert('AB', S, 2); Check(S = '0AB167', 4);
+  Insert('Z', S, 50); Check(S = '0AB167Z', 5);
+  Sh := 'abc'; Insert('XYZ', Sh, 2); Check(Sh = 'aXY', 6);
+  S[1] := 'Q'; Check(S[1] = 'Q', 7); Check(Ord(S[0]) = 7, 8);
+  Group('STR VAL');
+  Str(-1234, S); Check(S = '-1234', 1);
+  Str(42:5, S); Check(S = '   42', 2);
+  Str(-32768, S); Check(S = '-32768', 3);
+  Val('123', I, Code); Check((I = 123) and (Code = 0), 4);
+  Val('-7', I, Code); Check((I = -7) and (Code = 0), 5);
+  Val('$FF', I, Code); Check((I = 255) and (Code = 0), 6);
+  Val('12a', I, Code); Check(Code = 3, 7);
+  Val('', I, Code); Check(Code = 1, 8);
+  Val('32768', I, Code); Check(Code = 5, 9);
+  Val('-32768', I, Code); Check((I = -32768) and (Code = 0), 10);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+ASSIGN CAT   PASS   8
+COMPARE      PASS   9
+COPY POS     PASS  10
+INS DEL      PASS   8
+STR VAL      PASS  10
+TOTAL PASS 45 FAIL 0

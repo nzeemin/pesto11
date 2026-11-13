@@ -1102,7 +1102,7 @@ const char* GetCompareBranch(const Token& op, bool isunsigned, bool jumpiftrue);
 // Branch layout: replace short branches that cannot reach their target, see branches.cpp
 void LayoutBranches(ProcedureCode& code);
 
-// Write PROG.MAC and the runtime PESTO.MAC (or one file with --onefile), see generator.cpp
+// Write PROGRAM.MAC and the runtime PESTO.MAC (or one file with --onefile), see generator.cpp
 bool WriteAssemblyFiles(const FinalModel& final, const RuntimeGenerator& runtime,
         const string& outfilename, const string& rtfilename, const string& title);
 

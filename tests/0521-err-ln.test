@@ -1,0 +1,14 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+var R: Real;
+begin
+  R := 0;
+  WriteLn('before');
+  R := Ln(R);
+  WriteLn('never')
+end.
+=== SCREEN EXPECTED ===================================================
+before
+
+Run-time error 04, PC=001066
+Program aborted

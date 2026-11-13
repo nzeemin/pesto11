@@ -444,7 +444,8 @@ selector           ::= "[" expression { "," expression } "]" | "." field-identif
 
 ### 7.2. Ввод-вывод
 
-`Read`, `ReadLn`, `Write`, `WriteLn`, `Eof`, `Eoln`, `SeekEof`, `SeekEoln`, `Assign`, `Reset`, `Rewrite`, `Append`, `Close`, `Erase`, `Rename`, `Seek`, `Flush`, `FilePos`, `FileSize`, `BlockRead`, `BlockWrite`, `IOresult` — да.
+`Read`, `ReadLn`, `Write`, `WriteLn`, `Eof`, `Eoln`, `SeekEof`, `SeekEoln`, `Assign`, `Reset`, `Rewrite`, `Close`, `Erase`, `Rename`, `Seek`, `Flush`, `FilePos`, `FileSize`, `BlockRead`, `BlockWrite`, `IOresult` — да.
+**[P11]** `Append` — позже: в TP3 3.0 его нет, а RT-11 не дописывает в существующий файл. `BlockRead`/`BlockWrite` — записи по 128 байт, как в TP3.
 
 `Chain`, `Execute` — **нет**.
 
@@ -672,6 +673,7 @@ selector           ::= "[" expression { "," expression } "]" | "." field-identif
 | F2 | переполнение размера файла (запись > 65535) |
 | F3 | слишком много открытых файлов |
 | FF | файл исчез |
+| F4 | **[P11]** аппаратная ошибка чтения или записи |
 
 В TP3 сообщение имеет вид `I/O error NN, PC=addr` и `Program aborted`. При `{$I-}` после ошибки ввод-вывод приостанавливается до вызова `IOresult`.
 

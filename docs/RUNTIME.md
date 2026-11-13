@@ -185,14 +185,14 @@
 
 Файлы (`RDSETF`, `EOF`/`EOLN` для файлов и другие) — §10, шаг 9.
 
-## 10. Файлы **[Позже]**
+## 10. Файлы
 
-Формат блока файла (FIB) — DESIGN §6.4, пока не определён. Работа идёт через запросы RT-11 (`.LOOKUP`, `.ENTER`, `.READW`, `.WRITW`, `.CLOSE`, `.DELETE`, `.RENAME`).
+Формат блока файла (FIB) и форматы файлов — DESIGN §6.4. Работа идёт через запросы RT-11 (`.LOOKUP`, `.ENTER`, `.READW`, `.WRITW`, `.CLOSE`, `.DELETE`, `.RENAME`).
 
 | Имя | Вход | Действие |
 |---|---|---|
 | `FASSGN` | R0 = файл, R1 = строка с именем | `Assign` |
-| `FRESET`, `FREWRT`, `FAPPND`, `FCLOSE`, `FERASE`, `FFLUSH` | R0 = файл | `Reset`, `Rewrite`, `Append`, `Close`, `Erase`, `Flush` |
+| `FRESET`, `FREWRT`, `FCLOSE`, `FERASE`, `FFLUSH` | R0 = файл | `Reset`, `Rewrite`, `Close`, `Erase`, `Flush` |
 | `FRENAM` | R0 = файл, R1 = новое имя | `Rename` |
 | `FSEEK` | R0 = файл, R1 = номер записи | `Seek` |
 | `FPOS`, `FSIZE` | R0 = файл | R0 = `FilePos`, `FileSize` |

@@ -1,0 +1,82 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+var A: array[1..10] of Integer; B: array[1..3, 1..3] of Integer;
+  I, J, K, N: Integer; C: Char;
+function F(X: Integer): Integer;
+begin
+  N := N + 1; F := X * 2
+end;
+function G(X, Y: Integer): Integer;
+begin
+  G := X * 10 + Y
+end;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  for I := 1 to 10 do A[I] := I * I;
+  for I := 1 to 3 do for J := 1 to 3 do B[I, J] := I * 10 + J;
+  Group('NESTED');
+  I := 2; J := 3; K := 4;
+  Check(((I + J) * (K - I)) div (J - 1) = 5, 1);
+  Check(A[A[2]] = 16, 2);
+  Check(A[I + J] + A[K * 2] = 89, 3);
+  Check(B[I, J] = 23, 4); Check(B[B[1, 1] div 10, J] = 13, 5);
+  Check(A[A[A[2] - 2]] = 16, 6);
+  Check(-(-I) = 2, 7); Check(I * J * K * 10 div (J * K) = 20, 8);
+  Group('CALLS');
+  N := 0;
+  Check(F(3) + F(4) = 14, 1); Check(N = 2, 2);
+  Check(A[F(2)] = 16, 3);
+  Check(G(F(1), F(2)) = 24, 4);
+  Check(F(1) * F(2) + F(3) = 14, 5);
+  Check(G(G(1, 2), 3) = 123, 6);
+  I := 3; Check(I + F(I) * I = 21, 7);
+  Check(B[F(1) - 1, F(1) + 1] = 13, 8);
+  Group('CHAR EXPR');
+  C := 'c';
+  Check(Chr(Ord(C) + 1) = 'd', 1);
+  Check(Ord(C) - Ord('a') = 2, 2);
+  Check(Succ(Succ(C)) = 'e', 3);
+  Check(Chr(Ord('A') + Ord(C) - Ord('a')) = 'C', 4);
+  Group('BOOL EXPR');
+  I := 5;
+  Check((I > 3) and (I < 10) and not (I = 7), 1);
+  Check((I < 3) or (I > 4) and (I < 6), 2);
+  Check(not ((I > 3) and (I > 10)), 3);
+  Check(((I > 3) = True) and ((I > 9) = False), 4);
+  Check(Odd(I) and (I mod 5 = 0), 5);
+  Check((I in [1..9]) and not (I in [6..9]), 6);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+NESTED       PASS   8
+CALLS        PASS   8
+CHAR EXPR    PASS   4
+BOOL EXPR    PASS   6
+TOTAL PASS 26 FAIL 0

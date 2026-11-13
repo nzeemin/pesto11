@@ -1,0 +1,14 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+var A, B: Real;
+begin
+  A := 1; B := 0;
+  WriteLn('before');
+  A := A / B;
+  WriteLn('never')
+end.
+=== SCREEN EXPECTED ===================================================
+before
+
+Run-time error 02, PC=001112
+Program aborted

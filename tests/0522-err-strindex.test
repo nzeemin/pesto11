@@ -1,0 +1,14 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+var S: string[10]; I: Integer;
+begin
+  S := 'abc'; I := 0;
+  WriteLn('before');
+  S := Copy(S, I, 2);
+  WriteLn('never')
+end.
+=== SCREEN EXPECTED ===================================================
+before
+
+Run-time error 11, PC=001116
+Program aborted

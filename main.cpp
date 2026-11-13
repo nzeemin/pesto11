@@ -121,7 +121,7 @@ static void PrintWelcome()
 static void PrintUsage()
 {
     std::cout << std::endl
-              << "Usage: pesto11 [options] PROG.PAS" << std::endl
+              << "Usage: pesto11 [options] PROGRAM.PAS" << std::endl
               << "Options:" << std::endl
               << "  -q --quiet            Be quiet" << std::endl
               << "  --onefile             Put the program and the runtime into one .MAC file" << std::endl
@@ -203,7 +203,7 @@ static bool ParseCommandLine(int argc, char* argv[])
     return true;
 }
 
-// Make output file names from the input file name: PROG.PAS -> PROG.MAC
+// Make output file names from the input file name: PROGRAM.PAS -> PROGRAM.MAC
 static void PrepareOutputFileNames()
 {
     std::filesystem::path inpath(g_infilename);

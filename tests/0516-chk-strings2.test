@@ -1,0 +1,76 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+type Str20 = string[20];
+  Rec = record N: Str20; Age: Integer end;
+var S, T: Str20; Long: string[255]; L: array[1..3] of Str20; R: Rec;
+  I, J, Code: Integer; C: Char; W: array[1..4] of Char;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('ARRAYS RECS');
+  L[1] := 'one'; L[2] := 'two'; L[3] := L[1] + L[2];
+  Check(L[3] = 'onetwo', 1); Check(L[3][4] = 't', 2); Check(Length(L[2]) = 3, 3);
+  R.N := 'Ann'; Check(R.N + '!' = 'Ann!', 4);
+  I := 2; Check(L[I] = 'two', 5); Check(L[I + 1][1] = 'o', 6);
+  with R do N := N + N; Check(R.N = 'AnnAnn', 7);
+  Group('BUILD');
+  Long := '';
+  for I := 1 to 255 do Long := Long + Chr(Ord('a') + I mod 26);
+  Check(Length(Long) = 255, 1); Check(Long[255] = Chr(Ord('a') + 255 mod 26), 2);
+  S := ''; for C := 'a' to 'e' do S := C + S; Check(S = 'edcba', 3);
+  S := 'abc'; S := S + S + S; Check(S = 'abcabcabc', 4);
+  S := 'x'; for I := 1 to 5 do S := S + S; Check(Length(S) = 20, 5);
+  Group('EDIT');
+  S := 'hello world';
+  for I := 1 to Length(S) do if S[I] = 'o' then S[I] := '0';
+  Check(S = 'hell0 w0rld', 1);
+  S := 'a,b,,c'; J := 0;
+  while Pos(',', S) > 0 do begin Delete(S, Pos(',', S), 1); J := J + 1 end;
+  Check((S = 'abc') and (J = 3), 2);
+  S := 'abc'; for I := 1 to 3 do Insert('-', S, I * 2); Check(S = 'a-b-c-', 3);
+  S := '  trim'; while (Length(S) > 0) and (S[1] = ' ') do Delete(S, 1, 1); Check(S = 'trim', 4);
+  T := Copy('abcdef', 2, 3) + Copy('xyz', 3, 1); Check(T = 'bcdz', 5);
+  Group('CONVERT');
+  for I := -3 to 3 do
+  begin
+    Str(I * 1000, S); Val(S, J, Code);
+    if (J <> I * 1000) or (Code <> 0) then Check(False, I + 10)
+  end;
+  Check(True, 1);
+  W := 'abcd'; S := W; Check(S = 'abcd', 2); Check(W = 'abcd', 3); Check(W <> 'abce', 4);
+  S := W + 'e'; Check(S = 'abcde', 5);
+  C := 'z'; Check(C + C = 'zz', 6); Check(Length(C + '') = 1, 7);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+ARRAYS RECS  PASS   7
+BUILD        PASS   5
+EDIT         PASS   5
+CONVERT      PASS   7
+TOTAL PASS 24 FAIL 0

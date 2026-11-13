@@ -1,0 +1,114 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+type Str20 = string[20];
+  Digits = set of '0'..'9';
+  PInt = ^Integer;
+  Pair = record A: Str20; R: Real end;
+var S: Str20; R: Real; D: Digits; P: PInt; Q: Pair; I: Integer;
+function Twice(X: Str20): Str20;
+begin
+  Twice := X + X
+end;
+function Rev(X: Str20): Str20;
+begin
+  if Length(X) <= 1 then Rev := X
+  else Rev := Rev(Copy(X, 2, Length(X) - 1)) + X[1]
+end;
+function Half(X: Real): Real;
+begin
+  Half := X / 2
+end;
+function Pow(X: Real; N: Integer): Real;
+begin
+  if N = 0 then Pow := 1 else Pow := X * Pow(X, N - 1)
+end;
+function Count(X: Digits): Integer;
+var C: Char; K: Integer;
+begin
+  K := 0;
+  for C := '0' to '9' do if C in X then K := K + 1;
+  Count := K
+end;
+procedure AddDigit(var X: Digits; C: Char);
+begin
+  X := X + [C]
+end;
+procedure Upper(var X: Str20);
+var I: Integer;
+begin
+  for I := 1 to Length(X) do X[I] := UpCase(X[I])
+end;
+procedure Scale(var X: Real; F: Real);
+begin
+  X := X * F
+end;
+function NewInt(V: Integer): PInt;
+var T: PInt;
+begin
+  New(T); T^ := V; NewInt := T
+end;
+function LastChar(X: Str20): Char;
+begin
+  LastChar := X[Length(X)]
+end;
+function Mix(X: Str20; N: Integer; Y: Real; Z: Str20): Str20;
+var T: Str20;
+begin
+  Str(N + Trunc(Y), T);
+  Mix := X + T + Z
+end;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('STRING');
+  Check(Twice('ab') = 'abab', 1); Check(Rev('hello') = 'olleh', 2);
+  Check(Twice(Rev('xy')) = 'yxyx', 3); Check(Length(Twice('abc')) = 6, 4);
+  S := 'pesto'; Upper(S); Check(S = 'PESTO', 5);
+  Q.A := 'rec'; Upper(Q.A); Check(Q.A = 'REC', 6);
+  Check(LastChar('abc') = 'c', 7); Check(LastChar(Twice('xz')) = 'z', 8);
+  Check(Mix('a', 2, 3.5, 'b') = 'a5b', 9);
+  Check(Twice('a') + Twice('b') = 'aabb', 10);
+  Group('REAL');
+  Check(Half(5) = 2.5, 1); Check(Half(Half(10)) = 2.5, 2);
+  Check(Pow(2, 10) = 1024, 3); Check(Pow(0.5, 3) = 0.125, 4);
+  R := 3; Scale(R, 1.5); Check(R = 4.5, 5);
+  Q.R := 2; Scale(Q.R, Q.R); Check(Q.R = 4, 6);
+  Check(Half(Pow(3, 2)) + Half(1) = 5, 7);
+  Group('SET PTR');
+  D := ['1', '3']; Check(Count(D) = 2, 1);
+  AddDigit(D, '7'); Check(Count(D) = 3, 2); Check('7' in D, 3);
+  Check(Count(['0'..'9']) = 10, 4); Check(Count(D + ['2']) = 4, 5);
+  P := NewInt(77); Check(P^ = 77, 6); Check(NewInt(5)^ = 5, 7);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+STRING       PASS  10
+REAL         PASS   7
+SET PTR      PASS   7
+TOTAL PASS 24 FAIL 0

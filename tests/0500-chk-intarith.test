@@ -1,0 +1,78 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+var A, B, C: Integer;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('ADD SUB');
+  A := 1000; B := 234;
+  Check(A + B = 1234, 1);
+  Check(A - B = 766, 2);
+  Check(B - A = -766, 3);
+  Check(-A + B = -766, 4);
+  A := 32767; Check(A + 1 = -32768, 5);
+  A := -32768; Check(A - 1 = 32767, 6);
+  Check(-A = -32768, 7);
+  A := 5; A := A + A * 2 - (A - 3); Check(A = 13, 8);
+  Check(1000 + 234 = 1234, 9);
+  Group('MUL');
+  A := 123; B := 45; Check(A * B = 5535, 1);
+  B := -45; Check(A * B = -5535, 2);
+  A := 300; B := 300; Check(A * B = 24464, 3);
+  A := -1; Check(A * A = 1, 4);
+  A := 0; Check(A * 32767 = 0, 5);
+  A := 181; Check(Sqr(A) = 32761, 6);
+  Check(123 * 45 = 5535, 7);
+  Group('DIV MOD');
+  A := 17; B := 5;
+  Check(A div B = 3, 1); Check(A mod B = 2, 2);
+  A := -17; Check(A div B = -3, 3); Check(A mod B = -2, 4);
+  B := -5; Check(A div B = 3, 5); Check(A mod B = -2, 6);
+  A := 17; Check(A div B = -3, 7); Check(A mod B = 2, 8);
+  A := -32768; B := 1; Check(A div B = -32768, 9);
+  A := 32767; B := 32767; Check(A div B = 1, 10); Check(A mod B = 0, 11);
+  A := 7; B := 8; Check(A div B = 0, 12); Check(A mod B = 7, 13);
+  Check(-17 div 5 = -3, 14); Check(-17 mod 5 = -2, 15);
+  Group('PRECEDENCE');
+  A := 2; B := 3; C := 4;
+  Check(A + B * C = 14, 1);
+  Check((A + B) * C = 20, 2);
+  Check(A * B div C = 1, 3);
+  Check(A - B - C = -5, 4);
+  Check(C div A * B = 6, 5);
+  Check(-A * B = -6, 6);
+  Check(A - (B - C) = 3, 7);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+ADD SUB      PASS   9
+MUL          PASS   7
+DIV MOD      PASS  15
+PRECEDENCE   PASS   7
+TOTAL PASS 38 FAIL 0

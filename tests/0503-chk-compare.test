@@ -1,0 +1,65 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+var A, B, N: Integer; P, Q: Boolean;
+function Inc1: Boolean;
+begin
+  N := N + 1; Inc1 := True
+end;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('INT CMP');
+  A := -1; B := 1;
+  Check(A < B, 1); Check(not (A > B), 2); Check(A <= B, 3); Check(B >= A, 4); Check(A <> B, 5);
+  A := -32768; B := 32767; Check(A < B, 6);
+  A := 5; B := 5; Check(A <= B, 7); Check(A >= B, 8); Check(not (A <> B), 9);
+  Group('BOOLEAN');
+  P := True; Q := False;
+  Check(P and not Q, 1); Check(P or Q, 2); Check(P xor Q, 3); Check(not (P = Q), 4);
+  Check(Q < P, 5); Check(Ord(P) = 1, 6); Check(Succ(Q) = P, 7);
+  P := A = B; Check(P, 8);
+  Group('EVAL');
+  N := 0; P := Inc1 or Inc1; Check(N = 2, 1);
+  N := 0; P := False and Inc1; Check(N = 1, 2);
+  N := 0; if Inc1 and Inc1 then N := N + 10; Check(N = 12, 3);
+  Group('CONDITIONS');
+  A := 3;
+  if (A > 1) and (A < 5) then Check(True, 1) else Check(False, 1);
+  if (A < 1) or (A > 5) then Check(False, 2) else Check(True, 2);
+  if not ((A = 3) and (A <> 4)) then Check(False, 3) else Check(True, 3);
+  P := (A > 2) = (A < 4); Check(P, 4);
+  if A in [1, 3, 5] then Check(True, 5) else Check(False, 5);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+INT CMP      PASS   9
+BOOLEAN      PASS   8
+EVAL         PASS   3
+CONDITIONS   PASS   5
+TOTAL PASS 25 FAIL 0

@@ -1,13 +1,21 @@
 # Pesto/11
 
-Cross-compiler from the **Turbo Pascal 3.0** dialect to **PDP-11** assembly (MACRO-11), for Soviet PDP-11 compatible machines.
+Кросс-компилятор с диалекта **Turbo Pascal 3.0** в ассемблер **PDP-11** (MACRO-11) для советских PDP-11-совместимых машин.
 
-- First target: UKNC (Электроника МС 0511) under RT-11. The output `.MAC` is assembled with `macro11` and linked with `pclink11` into a `.SAV`.
-- Planned target: BK-0010 with the BKTurbo8 assembler.
+- Первая цель: УКНЦ (Электроника МС 0511) под RT-11. Полученный `.MAC` собирается ассемблером `macro11` и компонуется `pclink11` в `.SAV`.
+- Позже: БК-0010 с ассемблером BKTurbo8.
 
-**Status:** early development, the compiler does not compile programs yet.
+**Состояние:** компилятор в разработке. Уже работают выражения и операторы, процедуры и функции, массивы, записи, указатели и куча, строки, множества, Real, ввод с консоли, экран и клавиатура. Следующий шаг — файлы.
 
-## Building
+## Сборка
+
+Нужен компилятор C++17, других зависимостей нет. Компилятор собирается:
+
+- **Linux** — GCC или Clang;
+- **macOS** — Clang;
+- **Windows** — Visual Studio 2022 (MSVC).
+
+Все четыре варианта проверяются в CI (GitHub Actions).
 
 Linux / macOS:
 
@@ -16,25 +24,70 @@ make
 make test
 ```
 
-Windows: open `pesto11-VS2022.sln` in Visual Studio 2022, build, then run `!tests-run.cmd` from the repository root.
+Компилятор выбирается переменной `CXX`, например `make CXX=clang++`.
 
-Requires a C++17 compiler, no other dependencies.
+Windows: открыть `pesto11-VS2022.sln` в Visual Studio 2022, собрать, затем из корня репозитория запустить `!tests-run.cmd`.
 
-## Usage
+## Использование
 
 ```
-pesto11 [options] PROG.PAS
+pesto11 [ключи] PROGRAM.PAS
 ```
 
-Run `pesto11 --help` for the list of options.
+Компилятор читает `PROGRAM.PAS` (и файлы, включённые через `{$I ...}`) и пишет рядом с ним:
 
-## Documentation
+- `PROGRAM.MAC` — программа;
+- `PESTO.MAC` — рантайм: только те подпрограммы, которые нужны программе. С ключом `--onefile` рантайм пишется в конец `PROGRAM.MAC`.
 
-Design documents are in [`docs/`](docs/) (in Russian):
+Имя программы для RT-11 — не длиннее 6 символов, иначе компилятор выдаёт предупреждение. Шаблон рантайма `runtime-UKNC.tmac` должен лежать рядом с исполняемым файлом компилятора.
 
-- [`TP3-dialect.md`](docs/TP3-dialect.md) — the language accepted by Pesto/11 and its deviations from Turbo Pascal 3.0.
-- [`DESIGN.md`](docs/DESIGN.md) — compiler architecture and code generation.
+### Ключи
 
-## License
+| Ключ | Действие |
+|---|---|
+| `-q`, `--quiet` | не печатать заставку |
+| `--onefile` | программа и рантайм в одном файле `PROGRAM.MAC` |
+| `--platform=UKNC` | целевая платформа; пока поддерживается только `UKNC` (по умолчанию) |
+| `--noopt` | выключить оптимизацию списка команд (peephole); пока оптимизации нет, ключ ни на что не влияет |
+| `-t`, `--tokenizeonly` | вывести лексемы и остановиться |
+| `-p`, `--parsingonly` | вывести результат разбора и остановиться |
+| `-v`, `--validationonly` | вывести результат проверки (типы, символы, раскладку памяти) и остановиться |
+| `-g`, `--showgeneration` | вывести сгенерированный код также на консоль |
+| `-h`, `--help` | список ключей |
 
-MIT, see [LICENSE](LICENSE).
+Ключи и имя файла можно писать в любом порядке. Файл — ровно один.
+
+### Ошибки
+
+Ошибки и предупреждения выводятся в виде
+
+```
+PROGRAM.PAS(12,5): error 44: Type mismatch: Char is not compatible with Integer
+```
+
+(файл, строка, колонка, номер ошибки, текст)
+
+с номерами ошибок Turbo Pascal 3.0 (см. [`docs/TP3-dialect.md`](docs/TP3-dialect.md)). При ошибках `.MAC` не создаётся, код завершения — 1.
+
+### Пример: от исходника до `.SAV`
+
+```sh
+pesto11 -q HELLO.PAS
+macro11 HELLO.MAC -o HELLO.OBJ -rt11
+macro11 PESTO.MAC -o PESTO.OBJ -rt11
+pclink11 HELLO.OBJ PESTO.OBJ -EXECUTE:HELLO.SAV
+```
+
+`HELLO.SAV` запускается на УКНЦ (или в эмуляторе) командой `RU HELLO`.
+
+## Документация
+
+Проектные документы — в [`docs/`](docs/):
+
+- [`TP3-dialect.md`](docs/TP3-dialect.md) — язык, который принимает Pesto/11, и его отличия от Turbo Pascal 3.0.
+- [`DESIGN.md`](docs/DESIGN.md) — устройство компилятора и генерация кода.
+- [`RUNTIME.md`](docs/RUNTIME.md) — подпрограммы рантайма и их соглашения.
+
+## Лицензия
+
+MIT, см. [LICENSE](LICENSE).

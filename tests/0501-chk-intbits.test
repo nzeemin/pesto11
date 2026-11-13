@@ -1,0 +1,57 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+var A, B, N: Integer;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('AND OR XOR');
+  A := $F0F0; B := $3C3C;
+  Check(A and B = $3030, 1); Check(A or B = $FCFC, 2); Check(A xor B = $CCCC, 3);
+  Check(not A = $0F0F, 4); Check(not 0 = -1, 5);
+  Check((A and $FF) = $F0, 6); Check((A or 1) = $F0F1, 7);
+  Check($F0F0 and $3C3C = $3030, 8);
+  Group('SHL SHR');
+  A := 1; Check(A shl 4 = 16, 1); Check(A shl 15 = -32768, 2);
+  A := -1; Check(A shr 1 = 32767, 3); Check(A shr 15 = 1, 4);
+  A := $1234; Check(A shl 0 = $1234, 5); Check(A shr 4 = $123, 6);
+  Check(A shl 16 = 0, 7); Check(A shl 4 = $2340, 8);
+  Group('SHIFT VAR');
+  A := 1; N := 4; Check(A shl N = 16, 1);
+  N := 15; Check(A shl N = -32768, 2);
+  A := -1; N := 1; Check(A shr N = 32767, 3);
+  N := 15; Check(A shr N = 1, 4);
+  N := 16; Check(A shr N = 0, 5);
+  N := 0; Check(A shl N = -1, 6);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+AND OR XOR   PASS   8
+SHL SHR      PASS   8
+SHIFT VAR    PASS   6
+TOTAL PASS 22 FAIL 0

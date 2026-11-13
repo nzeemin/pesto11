@@ -1,0 +1,83 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+type Color = (Red, Green, Blue);
+var I, J, S: Integer; C: Char; K: Color; B: Byte;
+label 10, 20;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('FOR');
+  S := 0; for I := 1 to 10 do S := S + I; Check(S = 55, 1); Check(I = 10, 2);
+  S := 0; for I := 10 downto 1 do S := S * 2 + 1; Check(S = 1023, 3);
+  S := 0; for I := 5 to 4 do S := 1; Check(S = 0, 4);
+  S := 0; for C := 'A' to 'E' do S := S + 1; Check(S = 5, 5); Check(C = 'E', 6);
+  S := 0; for K := Red to Blue do S := S + Ord(K); Check(S = 3, 7);
+  S := 0; for B := 250 to 255 do S := S + 1; Check(S = 6, 8); Check(B = 255, 9);
+  S := 0; for I := 32765 to 32767 do S := S + 1; Check(S = 3, 10);
+  S := 0; for I := 1 to 3 do for J := I to 3 do S := S + 1; Check(S = 6, 11);
+  Group('WHILE REPEAT');
+  I := 0; while I < 5 do I := I + 1; Check(I = 5, 1);
+  I := 10; while I < 5 do I := 0; Check(I = 10, 2);
+  I := 0; repeat I := I + 2 until I >= 7; Check(I = 8, 3);
+  I := 0; S := 0; repeat S := S + I; I := I + 1 until I > 100; Check(S = 5050, 4);
+  Group('CASE');
+  S := 0;
+  for I := 0 to 12 do
+    case I of
+      1: S := S + 1;
+      2, 3: S := S + 10;
+      5..7: S := S + 100;
+      10, 11..12: S := S + 1000
+    else S := S + 5000
+    end;
+  Check(S = 23321, 1);
+  C := 'x'; case C of 'a'..'z': S := 1; 'A'..'Z': S := 2 end; Check(S = 1, 2);
+  K := Blue; case K of Red: S := 1; Green: S := 2; Blue: S := 3 end; Check(S = 3, 3);
+  I := 99; S := 0; case I of 1: S := 1 end; Check(S = 0, 4);
+  Group('GOTO');
+  I := 0;
+10: I := I + 1;
+  if I < 5 then goto 10;
+  Check(I = 5, 1);
+  S := 0;
+  for I := 1 to 10 do
+    for J := 1 to 10 do
+    begin
+      S := S + 1;
+      if (I = 3) and (J = 4) then goto 20
+    end;
+20: Check(S = 24, 2);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+FOR          PASS  11
+WHILE REPEAT PASS   4
+CASE         PASS   4
+GOTO         PASS   2
+TOTAL PASS 21 FAIL 0

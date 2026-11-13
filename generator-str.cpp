@@ -22,6 +22,13 @@ static string ConstStringBytes(const ExpressionNode& node)
     return node.constvalue.svalue;
 }
 
+// A Char used as a string: converted by the validator, or a Char operand of a string operation
+static bool IsCharAsString(const ExpressionNode& node)
+{
+    return node.convert == ConvertCharToString ||
+        (node.convert == ConvertNone && Validator::IsCharType(node.type));
+}
+
 // Maximum length of a string type
 static int StringMaxLength(int type)
 {
@@ -204,7 +211,7 @@ bool Generator::LoadRuntimeArgs(const ExpressionModel& mainexpr, std::vector<Run
 bool Generator::GenerateStringBuffer(const ExpressionModel& expr, int index)
 {
     const ExpressionNode& node = expr.nodes[index];
-    if (node.convert == ConvertCharToString)
+    if (IsCharAsString(node))
     {
         // A string of one character
         if (!node.isconst && !GenerateValue(expr, index, true))
@@ -292,7 +299,7 @@ bool Generator::GenerateStringBuffer(const ExpressionModel& expr, int index)
 bool Generator::AppendString(const ExpressionModel& expr, int index)
 {
     const ExpressionNode& node = expr.nodes[index];
-    if (node.convert == ConvertCharToString)
+    if (IsCharAsString(node))
     {
         if (node.isconst)
             Emit("MOV", Operand::Imm(node.constvalue.ivalue & 0xFF), Operand::Reg(1));

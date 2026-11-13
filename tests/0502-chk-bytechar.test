@@ -1,0 +1,64 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+type Color = (Red, Green, Blue);
+var B, B2: Byte; I: Integer; C: Char; K: Color;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('BYTE');
+  B := 200; B2 := 100;
+  Check(B + B2 = 300, 1);
+  Check(B > B2, 2);
+  I := B; Check(I = 200, 3);
+  B := B + B2; Check(B = 44, 4);
+  B := 255; I := -1; Check(B > I, 5);
+  B := 0; B := B - 1; Check(B = 255, 6);
+  B := 7; Check(B * B = 49, 7);
+  Group('CHAR');
+  C := 'A'; Check(Ord(C) = 65, 1); Check(Chr(66) = 'B', 2);
+  Check(Succ(C) = 'B', 3); Check(Pred('B') = C, 4);
+  Check(C < 'a', 5); C := #200; Check(C > 'z', 6);
+  Check(Ord(C) = 200, 7); Check(UpCase('q') = 'Q', 8); Check(UpCase('1') = '1', 9);
+  Group('ENUM');
+  K := Green; Check(Ord(K) = 1, 1); Check(Succ(K) = Blue, 2); Check(Pred(K) = Red, 3);
+  Check(K > Red, 4); Check(Color(2) = Blue, 5);
+  Group('FUNCS');
+  I := -5; Check(Abs(I) = 5, 1); Check(Sqr(I) = 25, 2);
+  Check(Odd(I), 3); Check(not Odd(4), 4);
+  I := $1234; Check(Hi(I) = $12, 5); Check(Lo(I) = $34, 6); Check(Swap(I) = $3412, 7);
+  I := -32768; Check(Abs(I) = -32768, 8);
+  Check(Succ(5) = 6, 9); Check(Pred(-32767) = -32768, 10);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+BYTE         PASS   7
+CHAR         PASS   9
+ENUM         PASS   5
+FUNCS        PASS  10
+TOTAL PASS 31 FAIL 0

@@ -1,0 +1,71 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+type Color = (Red, Green, Blue);
+  Pt = record X, Y: Integer end;
+  Line = record A, B: Pt; Name: string[5] end;
+const
+  Count: Integer = 3;
+  Ch: Char = 'q';
+  Flag: Boolean = True;
+  Hue: Color = Blue;
+  Name: string[10] = 'pesto';
+  Half: Real = 0.5;
+  Vec: array[1..3] of Integer = (7, -8, 9);
+  Mat: array[1..2, 1..2] of Byte = ((1, 2), (3, 4));
+  Ln1: Line = (A: (X: 1; Y: 2); B: (X: 3; Y: 4); Name: 'L1');
+  Vowels: set of Char = ['a', 'e', 'i', 'o', 'u'];
+  Tags: array[Color] of Char = ('r', 'g', 'b');
+  Lim = 10;
+var I: Integer;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('SIMPLE');
+  Check(Count = 3, 1); Check(Ch = 'q', 2); Check(Flag, 3); Check(Hue = Blue, 4);
+  Check(Name = 'pesto', 5); Check(Length(Name) = 5, 6); Check(Half = 0.5, 7);
+  Group('STRUCTURED');
+  Check(Vec[2] = -8, 1); Check(Vec[1] + Vec[3] = 16, 2);
+  Check(Mat[2, 1] = 3, 3); Check(Mat[1][2] = 2, 4);
+  Check(Ln1.B.X = 3, 5); Check(Ln1.A.Y = 2, 6); Check(Ln1.Name = 'L1', 7);
+  Check('e' in Vowels, 8); Check(not ('b' in Vowels), 9);
+  Check(Tags[Green] = 'g', 10);
+  Group('MODIFIED');
+  Count := Count + 1; Check(Count = 4, 1);
+  Name := Name + '!'; Check(Name = 'pesto!', 2);
+  Vec[2] := 0; Check(Vec[2] = 0, 3);
+  Ln1.A := Ln1.B; Check(Ln1.A.X = 3, 4);
+  Vowels := Vowels + ['y']; Check('y' in Vowels, 5);
+  I := Lim * 2; Check(I = 20, 6);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+SIMPLE       PASS   7
+STRUCTURED   PASS  10
+MODIFIED     PASS   6
+TOTAL PASS 23 FAIL 0

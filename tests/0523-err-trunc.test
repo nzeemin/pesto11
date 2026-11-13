@@ -1,0 +1,14 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+var R: Real; I: Integer;
+begin
+  R := 40000.0;
+  WriteLn('before');
+  I := Trunc(R);
+  WriteLn('never')
+end.
+=== SCREEN EXPECTED ===================================================
+before
+
+Run-time error 92, PC=001072
+Program aborted

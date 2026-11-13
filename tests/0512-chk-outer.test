@@ -1,0 +1,94 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+type Vec = array[1..4] of Integer;
+  Pt = record X, Y: Integer end;
+var Res: Integer; RS: string[20]; RR: Real;
+procedure Outer(N: Integer);
+var V: Vec; P: Pt; S: string[20]; R: Real; I: Integer;
+  procedure Fill(K: Integer);
+  var I: Integer;
+  begin
+    for I := 1 to 4 do V[I] := I * K;
+    P.X := K; P.Y := -K;
+    S := S + Chr(48 + K);
+    R := R + K / 2
+  end;
+  function Total: Integer;
+  var I, T: Integer;
+    function Item(J: Integer): Integer;
+    begin
+      Item := V[J] + P.X
+    end;
+  begin
+    T := 0;
+    for I := 1 to 4 do T := T + Item(I);
+    Total := T
+  end;
+  procedure Deep(L: Integer);
+    procedure Deeper;
+    begin
+      with P do begin X := X + L; Y := Y - L end;
+      if L > 0 then Deep(L - 1)
+    end;
+  begin
+    Deeper
+  end;
+begin
+  S := ''; R := 0;
+  Fill(N); Fill(N + 1);
+  Res := Total;
+  RS := S; RR := R;
+  P.X := 0; P.Y := 0;
+  Deep(3);
+  Res := Res * 100 + P.X
+end;
+function Fib(N: Integer): Integer;
+  function Inner(K: Integer): Integer;
+  begin
+    if K < 2 then Inner := K else Inner := Fib(K - 1) + Fib(K - 2)
+  end;
+begin
+  Fib := Inner(N)
+end;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('OUTER VARS');
+  Outer(2);
+  Check(RS = '23', 1);
+  Check(RR = 2.5, 2);
+  Check(Res = 4206, 3);
+  Group('RECURSION');
+  Check(Fib(10) = 55, 1); Check(Fib(1) = 1, 2); Check(Fib(15) = 610, 3);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+OUTER VARS   PASS   3
+RECURSION    PASS   3
+TOTAL PASS 6 FAIL 0
