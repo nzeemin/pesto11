@@ -26,6 +26,7 @@ std::vector<string> g_sourcefiles;
 static int g_errorcount = 0;
 
 const char* RUNTIME_FILE_NAME = "PESTO.MAC";
+const char* RUNTIME_TEMPLATE_NAME = "runtime-UKNC.tmac";
 const size_t RT11_MAX_FILE_NAME = 6;  // RT-11 file name is up to 6 characters, type up to 3
 
 
@@ -284,8 +285,24 @@ static void ProcessFiles()
         return;
     }
 
-    //TODO: Generator, RuntimeGenerator
-    ReportError("not implemented yet: generator");
+    RuntimeGenerator runtime;
+    std::filesystem::path templatepath = getexepath().parent_path() / RUNTIME_TEMPLATE_NAME;
+    if (!runtime.LoadTemplate(templatepath))
+    {
+        ReportError("cannot read the runtime template " + templatepath.string());
+        return;
+    }
+
+    FinalModel final;
+    Generator generator(&final, &runtime);
+    generator.GenerateProgram();
+    if (GetErrorCount() > 0)
+        return;
+
+    string title = std::filesystem::path(g_infilename).stem().string();
+    for (char& c : title)
+        c = (char)toupper((unsigned char)c);
+    WriteAssemblyFiles(final, runtime, g_outfilename, g_rtfilename, title.substr(0, 6));
 }
 
 

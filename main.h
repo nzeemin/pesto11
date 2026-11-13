@@ -855,3 +855,160 @@ private:
 
 
 //////////////////////////////////////////////////////////////////////
+// Generator output model, see codeline.cpp and docs/DESIGN.md section 4.11
+
+enum OperandMode
+{
+    OpNone = 0,
+    OpReg,              // Rn
+    OpRegDeferred,      // (Rn)
+    OpAutoInc,          // (Rn)+
+    OpAutoDec,          // -(Rn)
+    OpIndex,            // n(Rn)
+    OpIndexDeferred,    // @n(Rn)
+    OpImmediate,        // #n or #label
+    OpLabel,            // label or label+n (PC relative)
+    OpAbsolute,         // @#n
+};
+
+struct Operand
+{
+    OperandMode mode;
+    int     reg;            // 0..7
+    int64_t value;          // Number, offset
+    string  label;          // Label for OpImmediate/OpLabel/OpIndex
+public:
+    Operand() : mode(OpNone), reg(0), value(0) {}
+    static Operand Reg(int reg) { Operand op; op.mode = OpReg; op.reg = reg; return op; }
+    static Operand Imm(int64_t value) { Operand op; op.mode = OpImmediate; op.value = value; return op; }
+    static Operand ImmLabel(const string& label) { Operand op; op.mode = OpImmediate; op.label = label; return op; }
+    static Operand Label(const string& label, int64_t offset = 0) { Operand op; op.mode = OpLabel; op.label = label; op.value = offset; return op; }
+    static Operand Index(int reg, int64_t offset) { Operand op; op.mode = OpIndex; op.reg = reg; op.value = offset; return op; }
+    static Operand IndexDeferred(int reg, int64_t offset) { Operand op; op.mode = OpIndexDeferred; op.reg = reg; op.value = offset; return op; }
+    static Operand Deferred(int reg) { Operand op; op.mode = OpRegDeferred; op.reg = reg; return op; }
+    static Operand AutoInc(int reg) { Operand op; op.mode = OpAutoInc; op.reg = reg; return op; }
+    static Operand AutoDec(int reg) { Operand op; op.mode = OpAutoDec; op.reg = reg; return op; }
+    bool IsNone() const { return mode == OpNone; }
+    int  ExtraWords() const;    // Words this operand adds to the instruction
+    string ToString() const;
+};
+
+enum CodeLineKind
+{
+    LineInstruction = 0,    // Machine instruction
+    LineBranch,             // Bxx, BR, SOB: target in CodeLine::target
+    LineData,               // .WORD, .BYTE, .BLKW, .EVEN...: size in words
+    LineLabel,              // Label only
+    LineComment,            // Comment only
+    LineRaw,                // Line copied as is from the runtime template; words is an estimate
+};
+
+struct CodeLine
+{
+    CodeLineKind kind;
+    string  label;
+    string  opcode;
+    Operand src, dst;
+    string  text;           // Operands as text for directives
+    string  comment;
+    int     words;          // Size in words, for the branch layout
+    string  target;         // Branch target label
+public:
+    CodeLine() : kind(LineInstruction), words(0) {}
+    string ToString() const;  // Assembly text line, tabs between the fields
+};
+
+struct ProcedureCode
+{
+    int     procindex;
+    std::vector<CodeLine> lines;
+};
+
+struct FinalModel
+{
+    std::vector<ProcedureCode> procedures;  // The program first
+    std::vector<CodeLine> data;             // Constants, typed constants, global variables
+    std::set<string> runtimeneeds;          // Runtime blocks called by the code
+};
+
+extern std::vector<std::vector<string>> g_sourcelines;  // Source lines by file index, for comments
+
+string FormatNumber(int64_t value);     // Decimal number for macro11: "12." or "-4."
+
+
+//////////////////////////////////////////////////////////////////////
+// Runtime templates, see runtime.cpp and docs/RUNTIME.md
+
+struct RuntimeBlock
+{
+    string  name;
+    std::vector<string> needs;
+    std::vector<string> lines;
+};
+
+class RuntimeGenerator
+{
+    std::vector<RuntimeBlock> m_blocks;
+public:
+    bool LoadTemplate(const std::filesystem::path& path);
+    const RuntimeBlock* FindBlock(const string& name) const;
+    // Closure of the needed blocks over their dependencies, in template order
+    std::vector<const RuntimeBlock*> CollectBlocks(const std::set<string>& needs) const;
+};
+
+
+//////////////////////////////////////////////////////////////////////
+// Generator, see generator*.cpp and docs/DESIGN.md section 4.11
+
+class Generator
+{
+    FinalModel* m_final;
+    const RuntimeGenerator* m_runtime;
+    ProcedureCode* m_code;      // Procedure being generated
+    int     m_procindex;
+    int     m_labelcount;       // Counter for L labels
+    int     m_gotocount;        // Counter for G labels
+    std::map<int, string> m_gotolabels;     // Label symbol -> G label
+    std::map<string, string> m_strings;     // String constant bytes -> K label
+    std::vector<std::pair<string, string>> m_stringlist;  // K label and bytes, in creation order
+    int     m_stringcount;
+    int     m_lastfile, m_lastline;         // Last source line put into a comment
+public:
+    Generator(FinalModel* final, const RuntimeGenerator* runtime);
+public:
+    void GenerateProgram();
+private:
+    // Output, generator.cpp
+    void Emit(const string& opcode, const Operand& src = Operand(), const Operand& dst = Operand(), const string& comment = "");
+    void EmitLabel(const string& label);
+    void EmitComment(const string& comment);
+    void EmitData(const string& opcode, const string& text, int words, const string& comment = "");
+    void EmitCall(const string& runtimename, const string& comment = "");
+    void EmitTodo(const string& what);
+    void EmitSourceLine(const SourcePos& pos);
+    void EmitTemplateBlock(const string& name);
+    string NewLabel();
+    string GetGotoLabel(int symbol);
+    string GetStringLabel(const string& bytes);
+    void GenerateProcedure(int procindex);
+    void GenerateData();
+    void GenerateTypedConst(const SymbolModel& symbol, const StructConstModel& value);
+    void CollectTempSlots(const StatementModel& statement, std::vector<TempSlot>& slots);
+    // Statements, generator-stmt.cpp
+    void GenerateStatement(StatementModel& statement);
+    void GenerateCallStatement(StatementModel& statement);
+    // Expressions, generator-expr.cpp
+    bool GetVariableOperand(const ExpressionModel& expr, int index, Operand& operand);
+    bool GetVariableAddress(const ExpressionModel& expr, int index, Operand& operand);
+    bool LoadOrdinal(const ExpressionModel& expr, int index, int reg);
+    // Standard procedures, generator-std.cpp
+    void GenerateWrite(const ExpressionModel& expr, int index, bool isln);
+    bool GenerateWriteItem(const ExpressionModel& expr, const ArgModel& arg);
+};
+
+// Write PROG.MAC and the runtime PESTO.MAC (or one file with --onefile), see generator.cpp
+bool WriteAssemblyFiles(const FinalModel& final, const RuntimeGenerator& runtime,
+        const string& outfilename, const string& rtfilename, const string& title);
+
+
+//////////////////////////////////////////////////////////////////////

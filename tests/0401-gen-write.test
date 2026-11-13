@@ -1,0 +1,107 @@
+-q
+----------------------------------------------------------------------
+const Greeting = 'Hi';
+  Count: Integer = 42;
+  Name: string[10] = 'Pesto';
+  Flag: Boolean = True;
+  Letter: Char = 'Z';
+var I: Integer; C: Char; B: Boolean; S: string[20];
+begin
+  WriteLn(Greeting, Count, -32768, 7:5, '|');
+  Write(Name, '/', Name:8, 'x':3, True, False:7, Flag, Letter);
+  WriteLn;
+  WriteLn(I, C, B, S, I:3, S:4, C:2, B:6, '')
+end.
+----------------------------------------------------------------------
+----------------------------------------------------------------------
+	.TITLE	TEST
+	.GLOBL	WRBOOL, WRCH, WRCHW, WREOL, WRINT, WRINTW, WRSTR, WRSTRI, WRSTRW
+START::
+	MTPS	#340
+	CLR	@#177560
+	MTPS	#0
+	MOV	SP, INIT$S
+	CALL	WRSTRI
+	.WORD	K00001
+	MOV	C00001, R0
+	CALL	WRINT
+	MOV	#-32768., R0
+	CALL	WRINT
+	MOV	#7., R0
+	MOV	#5., R1
+	CALL	WRINTW
+	MOV	#124., R0
+	CALL	WRCH
+	CALL	WREOL
+	MOV	#C00002, R0
+	CALL	WRSTR
+	MOV	#47., R0
+	CALL	WRCH
+	MOV	#C00002, R0
+	MOV	#8., R1
+	CALL	WRSTRW
+	MOV	#120., R0
+	MOV	#3., R1
+	CALL	WRCHW
+	MOV	#1., R0
+	MOV	#-1., R1
+	CALL	WRBOOL
+	CLR	R0
+	MOV	#7., R1
+	CALL	WRBOOL
+	CLR	R0
+	BISB	C00003, R0
+	MOV	#-1., R1
+	CALL	WRBOOL
+	CLR	R0
+	BISB	C00004, R0
+	CALL	WRCH
+	CALL	WREOL
+	MOV	V00001, R0
+	CALL	WRINT
+	CLR	R0
+	BISB	V00002, R0
+	CALL	WRCH
+	CLR	R0
+	BISB	V00003, R0
+	MOV	#-1., R1
+	CALL	WRBOOL
+	MOV	#V00004, R0
+	CALL	WRSTR
+	MOV	V00001, R0
+	MOV	#3., R1
+	CALL	WRINTW
+	MOV	#V00004, R0
+	MOV	#4., R1
+	CALL	WRSTRW
+	CLR	R0
+	BISB	V00002, R0
+	MOV	#2., R1
+	CALL	WRCHW
+	CLR	R0
+	BISB	V00003, R0
+	MOV	#6., R1
+	CALL	WRBOOL
+	CALL	WRSTRI
+	.WORD	K00002
+	CALL	WREOL
+HALT::
+INIT$S = . + 2
+	MOV	#776, SP
+	EMT	350
+K00001:	.BYTE	2., 72., 105.
+K00002:	.BYTE	0.
+	.EVEN
+C00001:	.WORD	42.
+C00002:	.BYTE	5., 80., 101., 115., 116., 111.
+	.BLKB	5.
+	.EVEN
+C00003:	.BYTE	1.
+	.EVEN
+C00004:	.BYTE	90.
+	.EVEN
+V00001:	.BLKW	1.
+V00002:	.BLKW	1.
+V00003:	.BLKW	1.
+V00004:	.BLKW	11.
+	.END	START

@@ -159,6 +159,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="codeline.cpp" />
+    <ClCompile Include="generator.cpp" />
+    <ClCompile Include="generator-stmt.cpp" />
+    <ClCompile Include="generator-expr.cpp" />
+    <ClCompile Include="generator-std.cpp" />
+    <ClCompile Include="runtime.cpp" />
     <ClCompile Include="model.cpp" />
     <ClCompile Include="parser.cpp" />
     <ClCompile Include="tokenizer.cpp" />
@@ -166,6 +172,12 @@
     <ClCompile Include="validator.cpp" />
     <ClCompile Include="validator-expr.cpp" />
     <ClCompile Include="validator-std.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <CopyFileToFolders Include="runtime-UKNC.tmac">
+      <FileType>Document</FileType>
+      <DeploymentContent>true</DeploymentContent>
+    </CopyFileToFolders>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

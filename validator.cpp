@@ -783,8 +783,10 @@ void Validator::ValidateType(int index)
         {
             ConstValue low, high;
             int lowtype = g_typeError, hightype = g_typeError;
-            bool ok = EvaluateConstant(g_program.types[index].lowexpr, low, lowtype) &
-                      EvaluateConstant(g_program.types[index].highexpr, high, hightype);
+            // Both bounds are evaluated, so that errors in both are reported
+            bool lowok = EvaluateConstant(g_program.types[index].lowexpr, low, lowtype);
+            bool highok = EvaluateConstant(g_program.types[index].highexpr, high, hightype);
+            bool ok = lowok && highok;
             TypeModel& model = g_program.types[index];
             if (!ok)
             {

@@ -163,6 +163,34 @@ static int  HexDigitValue(int ch) { return IsDigit(ch) ? ch - '0' : ToUpper(ch) 
 
 const int CHAR_CTRLZ = 26;  // ^Z, end of text file
 
+std::vector<std::vector<string>> g_sourcelines;
+
+// Keep the source lines for the comments in the generated code
+static void StoreSourceLines(int fileindex, const string& text)
+{
+    if ((int)g_sourcelines.size() <= fileindex)
+        g_sourcelines.resize(fileindex + 1);
+    std::vector<string>& lines = g_sourcelines[fileindex];
+    string line;
+    for (size_t i = 0; i < text.size(); i++)
+    {
+        char ch = text[i];
+        if (ch == CHAR_CTRLZ)
+            break;
+        if (ch == '\r' || ch == '\n')
+        {
+            if (ch == '\r' && i + 1 < text.size() && text[i + 1] == '\n')
+                i++;
+            lines.push_back(line);
+            line.clear();
+        }
+        else
+            line += ch;
+    }
+    if (!line.empty())
+        lines.push_back(line);
+}
+
 
 //////////////////////////////////////////////////////////////////////
 // Tokenizer
@@ -182,6 +210,7 @@ bool Tokenizer::OpenMainFile(const string& filename)
         return false;
     }
     file.fileindex = RegisterSourceFile(filename);
+    StoreSourceLines(file.fileindex, file.text);
     file.path = filename;
     file.pos = 0;
     file.line = file.col = 1;
@@ -393,6 +422,7 @@ void Tokenizer::ProcessInclude(const string& name, const SourcePos& startpos)
     }
 
     file.fileindex = RegisterSourceFile(found.generic_string());
+    StoreSourceLines(file.fileindex, file.text);
     file.path = found;
     file.pos = 0;
     file.line = file.col = 1;
