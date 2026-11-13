@@ -1,0 +1,50 @@
+-q -p
+----------------------------------------------------------------------
+program Demo(Input, Output);
+label 10, Quit;
+const
+  N = 10; Neg = -5; R = 1.5E-3; Name = 'Pesto'; Big: Integer = 1000;
+  Digits: array[0..3] of Char = ('0','1','2','3');
+  Origin: Point = (X: 0; Y: -1);
+  Vowels: set of Char = ['a', 'e'..'i'];
+  Maze: Cube = ((0,1),(N,3));
+type
+  Day = (Mon, Tue, Wed); Range = 1..N; Upper = 'A'..'Z'; Minus = -10..-1;
+  Str = string[80]; Matrix = packed array[1..3, Day] of Real; PNode = ^Node;
+  Bits = set of 0..15; F = file of Node; U = file;
+var
+  I, J: Integer;
+  M: Byte absolute $80;
+  L: Byte absolute I;
+const More = 1;
+var K: Range;
+begin end.
+----------------------------------------------------------------------
+PROGRAM Demo (Input, Output)
+  LABEL 10, Quit
+  CONST N = 10
+  CONST Neg = (-5)
+  CONST R = 1.5E-3
+  CONST Name = 'Pesto'
+  CONST Big: Integer = 1000
+  CONST Digits: array[0..3] of Char = ('0', '1', '2', '3')
+  CONST Origin: Point = (X: 0; Y: (-1))
+  CONST Vowels: set of Char = ['a', 'e'..'i']
+  CONST Maze: Cube = ((0, 1), (N, 3))
+  TYPE Day = (Mon, Tue, Wed)
+  TYPE Range = 1..N
+  TYPE Upper = 'A'..'Z'
+  TYPE Minus = (-10)..(-1)
+  TYPE Str = string[80]
+  TYPE Matrix = packed array[1..3] of packed array[Day] of Real
+  TYPE PNode = ^Node
+  TYPE Bits = set of 0..15
+  TYPE F = file of Node
+  TYPE U = file
+  VAR I, J: Integer
+  VAR M: Byte ABSOLUTE $80
+  VAR L: Byte ABSOLUTE I
+  CONST More = 1
+  VAR K: Range
+  BEGIN
+    EMPTY

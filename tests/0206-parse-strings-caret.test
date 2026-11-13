@@ -1,0 +1,33 @@
+-q -p
+----------------------------------------------------------------------
+const
+  Msg = 'Hello'#13^G'!'; Bell = ^G; Esc = ^[; Lower = ^g;
+  Mix = #27'Y'^@#32;
+type
+  P = ^G;
+var
+  C: Char;
+begin
+  C := ^M;
+  S := 'A'^M^J + ^A;
+  case C of ^A..^Z: C := ' '; ^[: end;
+  Write('Line'^M^J)
+end.
+----------------------------------------------------------------------
+PROGRAM
+  CONST Msg = 'Hello'#13#7'!'
+  CONST Bell = #7
+  CONST Esc = #27
+  CONST Lower = #7
+  CONST Mix = #27'Y'#0' '
+  TYPE P = ^G
+  VAR C: Char
+  BEGIN
+    ASSIGN C := #13
+    ASSIGN S := ('A'#13#10 + #1)
+    CASE C
+      #1..#26:
+        ASSIGN C := ' '
+      #27:
+        EMPTY
+    CALL Write('Line'#13#10)

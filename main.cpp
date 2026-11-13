@@ -261,12 +261,19 @@ static void ProcessFiles()
         return;
     }
 
-    //TODO: Parser, Validator, Generator, RuntimeGenerator
-    // Until the parser exists, run the tokenizer through the whole text to report its errors
-    while (!tokenizer.GetNextToken().IsEOF())
-        ;
-    if (GetErrorCount() == 0)
-        ReportError("not implemented yet: parser");
+    Parser parser(&tokenizer);
+    parser.ParseProgram();
+    if (GetErrorCount() > 0)
+        return;
+
+    if (g_parsingonly)
+    {
+        g_program.Dump(std::cout);
+        return;
+    }
+
+    //TODO: Validator, Generator, RuntimeGenerator
+    ReportError("not implemented yet: validator");
 }
 
 

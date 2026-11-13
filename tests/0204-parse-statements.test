@@ -1,0 +1,68 @@
+-q -p
+----------------------------------------------------------------------
+label 10, Quit;
+begin
+  10: I := 1;
+  if I < N then
+    if I = 0 then Show(I) else J := J - 1
+  else
+    begin end;
+  case I of
+    1, 2..3: J := 0;
+    N: ;
+  else
+    J := 1; I := 2
+  end;
+  case C of 'a': J := 1 end;
+  while P^.Next <> nil do P := P^.Next^.Prev;
+  repeat Inc(I); Dec(J) until I >= 10;
+  for I := 10 downto 1 do M := Mem[$80 + I];
+  for I := A to B do ;
+  with Node1, A[I].Rec do Value := 3;
+  goto Quit;
+  inline($10/<$1234/>Big+2/*-4/-1);
+  A[I, J]^.F[K] := B;
+Quit:
+end.
+----------------------------------------------------------------------
+PROGRAM
+  LABEL 10, Quit
+  BEGIN
+    10: ASSIGN I := 1
+    IF (I < N)
+      THEN
+        IF (I = 0)
+          THEN
+            CALL Show(I)
+          ELSE
+            ASSIGN J := (J - 1)
+      ELSE
+        BEGIN
+          EMPTY
+    CASE I
+      1, 2..3:
+        ASSIGN J := 0
+      N:
+        EMPTY
+      ELSE
+        ASSIGN J := 1
+        ASSIGN I := 2
+    CASE C
+      'a':
+        ASSIGN J := 1
+    WHILE (P^.Next <> nil)
+      ASSIGN P := P^.Next^.Prev
+    REPEAT
+      CALL Inc(I)
+      CALL Dec(J)
+    UNTIL (I >= 10)
+    FOR I := 10 DOWNTO 1
+      ASSIGN M := Mem[($80 + I)]
+    FOR I := A TO B
+      EMPTY
+    WITH Node1, A[I].Rec
+      ASSIGN Value := 3
+    GOTO Quit
+    INLINE ($10/<$1234/>Big+2/*-4/-1)
+    ASSIGN A[I, J]^.F[K] := B
+    Quit: EMPTY

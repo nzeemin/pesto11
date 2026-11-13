@@ -1,0 +1,22 @@
+-q -p
+----------------------------------------------------------------------
+var A: Integer;
+    B Integer;
+    C: Char;
+begin
+  A := 1
+  B := 2;
+  C := ^ G;
+  if A then B := ;
+  for A = 1 to 2 do;
+  repeat A := A + 1 until;
+  X := Y +
+end.
+----------------------------------------------------------------------
+TEST.PAS(2,7): error 2: ':' expected
+TEST.PAS(6,3): error 1: ';' expected
+TEST.PAS(7,9): error 58: Illegal character after ^, control character expected
+TEST.PAS(8,18): error 41: Syntax error: operand expected
+TEST.PAS(9,9): error 7: ':=' expected
+TEST.PAS(10,26): error 41: Syntax error: operand expected
+TEST.PAS(12,1): error 41: Syntax error: operand expected

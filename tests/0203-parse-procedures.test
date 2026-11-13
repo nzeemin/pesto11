@@ -1,0 +1,42 @@
+-q -p
+----------------------------------------------------------------------
+procedure Show(A: Integer; var S: Str; var Any); forward;
+function Sum(X, Y: Real): Real;
+  var T: Real;
+  function Twice(V: Real): Real;
+  begin Twice := V * 2 end;
+begin
+  T := Twice(X) + Y;
+  Sum := T
+end;
+procedure Show;
+begin
+  WriteLn('A=', A:5, ' R=', Sum(1.5, 2E3):8:2)
+end;
+function Peek(Addr: Integer): Byte; external $F003;
+overlay procedure Big; begin end;
+procedure NoParams; begin Show(1, S, X) end;
+begin NoParams end.
+----------------------------------------------------------------------
+PROGRAM
+  PROCEDURE Show(A: Integer; var S: Str; var Any) FORWARD
+  FUNCTION Sum(X, Y: Real): Real
+    VAR T: Real
+    FUNCTION Twice(V: Real): Real
+      BEGIN
+        ASSIGN Twice := (V * 2)
+    BEGIN
+      ASSIGN T := (Twice(X) + Y)
+      ASSIGN Sum := T
+  PROCEDURE Show
+    BEGIN
+      CALL WriteLn('A=', A:5, ' R=', Sum(1.5, 2E3):8:2)
+  FUNCTION Peek(Addr: Integer): Byte EXTERNAL $F003
+  PROCEDURE Big OVERLAY
+    BEGIN
+      EMPTY
+  PROCEDURE NoParams
+    BEGIN
+      CALL Show(1, S, X)
+  BEGIN
+    CALL NoParams

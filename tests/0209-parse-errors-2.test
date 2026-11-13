@@ -1,0 +1,20 @@
+-q -p
+----------------------------------------------------------------------
+program 123;
+const begin = 1;
+type T = packed Integer;
+procedure P(A, B);
+begin
+  inline($10/+);
+  goto ;
+end;
+begin
+end
+----------------------------------------------------------------------
+TEST.PAS(1,9): error 41: Identifier expected
+TEST.PAS(2,7): error 53: Reserved word BEGIN cannot be used as an identifier
+TEST.PAS(3,17): error: ARRAY, RECORD, SET or FILE expected after PACKED
+TEST.PAS(4,17): error 2: ':' expected
+TEST.PAS(6,15): error 74: INLINE error: number, identifier or * expected
+TEST.PAS(7,8): error 41: Label expected
+TEST.PAS(11,1): error 10: '.' expected

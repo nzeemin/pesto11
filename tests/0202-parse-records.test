@@ -1,0 +1,19 @@
+-q -p
+----------------------------------------------------------------------
+type Node = record
+    Value: Integer;
+    Next, Prev: ^Node;
+    case Kind: Day of
+      Mon, Tue: (R: Real);
+      Wed: (S: Str; case Boolean of True: ())
+  end;
+  Free = record case Integer of 1: (A: Integer); 2: (B, C: Byte); end;
+  Empty = record end;
+begin end.
+----------------------------------------------------------------------
+PROGRAM
+  TYPE Node = record Value: Integer; Next, Prev: ^Node; case Kind: Day of Mon, Tue: (R: Real); Wed: (S: Str; case Boolean of True: ()) end
+  TYPE Free = record case Integer of 1: (A: Integer); 2: (B, C: Byte) end
+  TYPE Empty = record end
+  BEGIN
+    EMPTY
