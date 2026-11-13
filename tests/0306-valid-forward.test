@@ -1,5 +1,5 @@
--q -v
-----------------------------------------------------------------------
+OPTIONS = -q -v
+=== SOURCE ============================================================
 function Odd2(N: Integer): Boolean; forward;
 function Even2(N: Integer): Boolean;
 begin if N = 0 then Even2 := True else Even2 := Odd2(N - 1) end;
@@ -10,7 +10,7 @@ begin if N <= 1 then Fact := 1 else Fact := N * Fact(N - 1) end;
 begin
   if Odd2(3) then WriteLn(Fact(5))
 end.
-----------------------------------------------------------------------
+=== OUTPUT ============================================================
 PROGRAM
   FUNCTION Odd2(N: Integer): Boolean FORWARD {P00001}
   FUNCTION Even2(N: Integer): Boolean {P00002, params 2, locals 2}

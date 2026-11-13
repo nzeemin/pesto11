@@ -1,5 +1,5 @@
--q -p
-----------------------------------------------------------------------
+OPTIONS = -q -p
+=== SOURCE ============================================================
 program 123;
 const begin = 1;
 type T = packed Integer;
@@ -10,7 +10,7 @@ begin
 end;
 begin
 end
-----------------------------------------------------------------------
+=== OUTPUT ============================================================
 TEST.PAS(1,9): error 41: Identifier expected
 TEST.PAS(2,7): error 53: Reserved word BEGIN cannot be used as an identifier
 TEST.PAS(3,17): error: ARRAY, RECORD, SET or FILE expected after PACKED

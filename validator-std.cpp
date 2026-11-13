@@ -94,8 +94,6 @@ const StdRoutineSpec Validator::m_stdroutines[] =
     STDPROC("ClrEol", ""),
     STDPROC("DelLine", ""),
     STDPROC("InsLine", ""),
-    STDPROC("LowVideo", ""),
-    STDPROC("NormVideo", ""),
     STDPROC("CrtInit", ""),
     STDPROC("CrtExit", ""),
     STDPROC("GotoXY", "ii"),
@@ -116,6 +114,8 @@ const StdRoutineSpec Validator::m_stdroutines[] =
     STDFUNC("ParamCount", "", 'I'),
     STDFUNC("ParamStr", "i", 'S'),
     // Not supported in Pesto/11
+    STDUNSUPPORTED("LowVideo"),
+    STDUNSUPPORTED("NormVideo"),
     STDUNSUPPORTED("Chain"),
     STDUNSUPPORTED("Execute"),
     STDUNSUPPORTED("Bdos"),

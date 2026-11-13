@@ -1,5 +1,5 @@
--q -v
-----------------------------------------------------------------------
+OPTIONS = -q -v
+=== SOURCE ============================================================
 label 5, 6, 8;
 var I: Integer; R: Real; S: string[5]; C: Char;
 function F: Integer; begin F := 1 end;
@@ -21,7 +21,7 @@ begin
   5: ; 5: ;
   F := 2
 end.
-----------------------------------------------------------------------
+=== OUTPUT ============================================================
 TEST.PAS(4,34): error 72: Label not within current block: 5
 TEST.PAS(6,6): error 20: Boolean expression expected
 TEST.PAS(7,9): error 20: Boolean expression expected

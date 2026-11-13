@@ -1,5 +1,5 @@
--q -v
-----------------------------------------------------------------------
+OPTIONS = -q -v
+=== SOURCE ============================================================
 type
   Day = (Mon, Tue, Wed);
   Small = 0..200; Signed = -1..1; Letters = 'A'..'Z'; Days = Tue..Wed;
@@ -21,7 +21,7 @@ type
   Mixed = record A: Char; I: Integer; C: Char end;
   F = file of Node; U = file;
 begin end.
-----------------------------------------------------------------------
+=== OUTPUT ============================================================
 PROGRAM
   TYPE Day = (Mon, Tue, Wed) {size 1}
   TYPE Small = 0..200 {size 1}

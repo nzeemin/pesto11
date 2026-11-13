@@ -1,5 +1,5 @@
--q
-------------------------------------------------------------
+OPTIONS = -q
+=== SOURCE ============================================================
 type P = record X, Y: Real end;
 var A, B: Real; I: Integer; Q: P; V: array[1..4] of Real;
 function F(X: Real; var Y: Real): Real;
@@ -15,8 +15,7 @@ begin
   if A < B then I := Round(A) else I := Trunc(B / 3);
   WriteLn(A:8:2, Sqrt(B))
 end.
-------------------------------------------------------------
-------------------------------------------------------------
+=== MAC EXPECTED ======================================================
 	.TITLE	TEST
 	.GLOBL	FCMP, FISOFF, FISON, FROUND, FSQR, FTOI, ITOF, WREOL, WRREAL
 START::

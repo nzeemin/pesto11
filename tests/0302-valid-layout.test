@@ -1,5 +1,5 @@
--q -v
-----------------------------------------------------------------------
+OPTIONS = -q -v
+=== SOURCE ============================================================
 type Str = string[20];
 var G: Integer; GS: Str; GC: Char;
 procedure P(A: Integer; var B: Integer; C: Real; S: Str; var Any);
@@ -16,7 +16,7 @@ function FS(A: Str): Str; begin FS := A end;
 begin
   G := FI(1); GS := FS('x'); G := Trunc(FR(1.5))
 end.
-----------------------------------------------------------------------
+=== OUTPUT ============================================================
 PROGRAM
   TYPE Str = string[20] {size 21}
   VAR G: Integer {V00001, size 2}

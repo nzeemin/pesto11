@@ -1,5 +1,5 @@
--q
-------------------------------------------------------------
+OPTIONS = -q
+=== SOURCE ============================================================
 type Digits = set of '0'..'9';
 var S, T: set of Char; D: Digits; C: Char; B: Boolean;
 procedure P(X: Digits);
@@ -15,8 +15,7 @@ begin
   P(D);
   P(['7'])
 end.
-------------------------------------------------------------
-------------------------------------------------------------
+=== MAC EXPECTED ======================================================
 	.TITLE	TEST
 	.GLOBL	SETADD, SETDF, SETEQ, SETIN, SETINV, SETLD, SETLE, SETST
 START::

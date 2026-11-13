@@ -163,7 +163,7 @@
 
 | Имя | Вход |
 |---|---|
-| `CLRSCR`, `CLREOL`, `DELLIN`, `INSLIN`, `LOWVID`, `NRMVID`, `CRTINI`, `CRTEXI` | — |
+| `CLRSCR`, `CLREOL`, `DELLIN`, `INSLIN`, `CRTINI`, `CRTEXI` | — |
 | `GOTOXY` | R0 = X, R1 = Y |
 
 ## 9. Ввод текста **[Позже]**

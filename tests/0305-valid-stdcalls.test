@@ -1,5 +1,5 @@
--q -v
-----------------------------------------------------------------------
+OPTIONS = -q -v
+=== SOURCE ============================================================
 var I, Code: Integer; R: Real; S: string[20]; C: Char; F: Text; T: file of Integer; P: ^Integer; B: Boolean;
 begin
   Write('I=', I:5, ' R=', R:8:2, R:10, C, B, S);
@@ -16,7 +16,7 @@ begin
   GotoXY(1, 2); ClrScr; Delay(100); I := Mem[$80] + Addr(I);
   if KeyPressed then Halt
 end.
-----------------------------------------------------------------------
+=== OUTPUT ============================================================
 PROGRAM
   VAR I, Code: Integer {V00001, V00002, size 2}
   VAR R: Real {V00003, size 4}

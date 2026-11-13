@@ -467,7 +467,7 @@ selector           ::= "[" expression { "," expression } "]" | "." field-identif
 
 ### 7.6. Экран и клавиатура
 
-`ClrScr`, `ClrEol`, `GotoXY`, `DelLine`, `InsLine`, `LowVideo`, `NormVideo`, `CrtInit`, `CrtExit`, `KeyPressed` — да, через терминал УКНЦ, в пределах его возможностей.
+`ClrScr`, `ClrEol`, `GotoXY`, `DelLine`, `InsLine`, `CrtInit`, `CrtExit`, `KeyPressed` — да, через терминал УКНЦ, в пределах его возможностей. **[P11]** `LowVideo`, `NormVideo` — нет: у УКНЦ нет полуяркости, а замена цветом или инверсией не равноценна.
 
 ### 7.7. Прочее
 
@@ -682,7 +682,7 @@ selector           ::= "[" expression { "," expression } "]" | "." field-identif
 1. Real хранится в 4 байтах DEC F (около 7 знаков); на УКНЦ операции через FIS.
 2. Код всегда рекурсивный. `{$A±}` игнорируется, ограничение D.2 снято.
 3. Слова выравниваются по чётным адресам, поэтому `SizeOf` записей и массивов может отличаться.
-4. Нет `Port`, `Bdos`/`Bios`/`BdosHL`/`BiosHL`, `Chain`/`Execute`, `overlay`, `RecurPtr`, `Aux`/`Usr`.
+4. Нет `Port`, `Bdos`/`Bios`/`BdosHL`/`BiosHL`, `Chain`/`Execute`, `overlay`, `RecurPtr`, `Aux`/`Usr`, `LowVideo`/`NormVideo`.
 5. `inline` и `external` работают с машинным кодом PDP-11 и соглашениями Pesto/11.
 6. Имена файлов в формате RT-11. Исходник и строки в КОИ-8Р.
 7. Нет ограничения на длину строки исходника и глубину `with`.

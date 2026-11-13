@@ -1,5 +1,5 @@
--q -v
-----------------------------------------------------------------------
+OPTIONS = -q -v
+=== SOURCE ============================================================
 label 5;
 const
   Bad = 32768;
@@ -25,7 +25,7 @@ overlay procedure O; begin end;
 procedure PF(F: Text); begin end;
 function FR(X: Integer): Rec1; begin end;
 begin end.
-----------------------------------------------------------------------
+=== OUTPUT ============================================================
 TEST.PAS(3,9): error 56: Error in integer constant: 32768 is out of range -32768..32767
 TEST.PAS(5,3): error 43: Duplicate identifier or label: A
 TEST.PAS(7,8): error 52: Lower bound > upper bound

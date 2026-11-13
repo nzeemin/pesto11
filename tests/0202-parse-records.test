@@ -1,5 +1,5 @@
--q -p
-----------------------------------------------------------------------
+OPTIONS = -q -p
+=== SOURCE ============================================================
 type Node = record
     Value: Integer;
     Next, Prev: ^Node;
@@ -10,7 +10,7 @@ type Node = record
   Free = record case Integer of 1: (A: Integer); 2: (B, C: Byte); end;
   Empty = record end;
 begin end.
-----------------------------------------------------------------------
+=== OUTPUT ============================================================
 PROGRAM
   TYPE Node = record Value: Integer; Next, Prev: ^Node; case Kind: Day of Mon, Tue: (R: Real); Wed: (S: Str; case Boolean of True: ()) end
   TYPE Free = record case Integer of 1: (A: Integer); 2: (B, C: Byte) end

@@ -1,5 +1,5 @@
--q -v
-----------------------------------------------------------------------
+OPTIONS = -q -v
+=== SOURCE ============================================================
 label 1, Done;
 type Rec = record X, Y: Integer; Inner: record Z: Char end end;
 var I: Integer; C: Char; R: Rec; P: ^Rec; A: array[1..2] of Rec;
@@ -16,7 +16,7 @@ begin
   if I = 0 then goto Done else goto 1;
 Done:
 end.
-----------------------------------------------------------------------
+=== OUTPUT ============================================================
 PROGRAM
   LABEL 1, Done
   TYPE Rec = record X, Y: Integer; Inner: record Z: Char end end {size 6}

@@ -8,6 +8,7 @@
 #include <iostream>
 #include <iomanip>
 #include <fstream>
+#include <set>
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -136,75 +137,127 @@ static fs::path find_tool(const string& name)
 
 struct TestCase
 {
-    string options;                     // Compiler command line options
-    std::vector<string> source;         // Pascal source lines
-    std::vector<std::pair<string, std::vector<string>>> extrafiles;  // Include files: name and lines
-    std::vector<string> expected;       // Expected compiler output lines, non-empty
-    std::vector<string> etalon;         // Reference .MAC lines, stripped; empty if no section
-    bool hasscreen;                     // Section 5 is present: run in the emulator
+    string options;                     // Compiler command line options: header OPTIONS = ...
+    std::vector<string> source;         // Pascal source lines: section SOURCE
+    std::vector<std::pair<string, std::vector<string>>> extrafiles;  // Sections SOURCE NAME.EXT: name and lines
+    std::vector<string> expected;       // Expected compiler output lines, non-empty: section OUTPUT
+    std::vector<string> etalon;         // Reference .MAC lines, stripped: section MAC EXPECTED
+    bool hasscreen;                     // Section SCREEN EXPECTED is present: run in the emulator
     std::vector<string> screen;         // Expected program output on the screen
+    std::vector<string> keys;           // Keyboard input for the run: section KEYS INPUT
 public:
     TestCase() : hasscreen(false) {}
 };
 
-// Section separator: a line of three or more '-' and nothing else
-static bool is_separator(const string& line)
+// Test file format: a header of "KEY = VALUE" lines, then named sections. A section starts
+// with a line "=== NAME"; the rest of the line after the name (spaces and '=') is ignored.
+// Sections: SOURCE, SOURCE NAME.EXT (an extra file, like an include file), OUTPUT,
+// MAC EXPECTED, KEYS INPUT, SCREEN EXPECTED. Returns an error message, empty if fine.
+static string get_section_name(const string& line)
 {
-    if (line.size() < 3)
-        return false;
-    return line.find_first_not_of('-') == string::npos;
+    string name = line.substr(4);
+    while (!name.empty() && (name.back() == '=' || name.back() == ' ' || name.back() == '\r'))
+        name.pop_back();
+    return name;
 }
 
-static bool parse_test_file(const fs::path& path, TestCase& test)
+static string trim(const string& text)
+{
+    size_t first = text.find_first_not_of(" \t");
+    if (first == string::npos)
+        return "";
+    size_t last = text.find_last_not_of(" \t\r");
+    return text.substr(first, last - first + 1);
+}
+
+static string parse_test_file(const fs::path& path, TestCase& test)
 {
     std::ifstream file(path, std::ios::in | std::ios::binary);
     if (!file)
-        return false;
+        return "cannot read the test file";
 
+    enum { InHeader, InSource, InExtra, InOutput, InMac, InKeys, InScreen } section = InHeader;
+    std::set<string> seen;
+    bool hassource = false;
     string line;
-    getlinecr(file, test.options);  // Line 1: compiler options
-    getlinecr(file, line);          // Line 2: skipped (separator)
-
-    int section = 2;
     while (getlinecr(file, line))
     {
-        if (is_separator(line))
+        if (line.compare(0, 4, "=== ") == 0)
         {
-            section++;
-            if (section == 5)
+            string name = get_section_name(line);
+            if (name != "SOURCE" && name.compare(0, 7, "SOURCE ") == 0)
+            {
+                test.extrafiles.push_back(std::make_pair(name.substr(7), std::vector<string>()));
+                section = InExtra;
+                continue;
+            }
+            if (!seen.insert(name).second)
+                return "section " + name + " is repeated";
+            if (name == "SOURCE")
+            {
+                section = InSource;
+                hassource = true;
+            }
+            else if (name == "OUTPUT")
+                section = InOutput;
+            else if (name == "MAC EXPECTED")
+                section = InMac;
+            else if (name == "KEYS INPUT")
+                section = InKeys;
+            else if (name == "SCREEN EXPECTED")
+            {
+                section = InScreen;
                 test.hasscreen = true;
+            }
+            else
+                return "unknown section " + name;
             continue;
         }
         switch (section)
         {
-        case 2:
-            // "@@@ FILE NAME.EXT" starts an extra file, like an include file, in the test directory
-            if (line.compare(0, 9, "@@@ FILE ") == 0)
-                test.extrafiles.push_back(std::make_pair(line.substr(9), std::vector<string>()));
-            else if (!test.extrafiles.empty())
-                test.extrafiles.back().second.push_back(line);
-            else
-                test.source.push_back(line);
+        case InHeader:
+            {
+                if (trim(line).empty())
+                    break;
+                size_t equal = line.find('=');
+                if (equal == string::npos)
+                    return "header line without '=': " + line;
+                string key = trim(line.substr(0, equal));
+                string value = trim(line.substr(equal + 1));
+                if (key == "OPTIONS")
+                    test.options = value;
+                else
+                    return "unknown header key " + key;
+            }
             break;
-        case 3:
+        case InSource:
+            test.source.push_back(line);
+            break;
+        case InExtra:
+            test.extrafiles.back().second.push_back(line);
+            break;
+        case InOutput:
             if (!line.empty())
                 test.expected.push_back(line);
             break;
-        case 4:
+        case InMac:
             if (line.empty() || line[0] == ';')
                 break;
             line = strip_mac_line(line);
             if (!line.empty())
                 test.etalon.push_back(line);
             break;
-        case 5:
-            test.screen.push_back(line);
+        case InKeys:
+            test.keys.push_back(line);
             break;
-        default:
+        case InScreen:
+            test.screen.push_back(line);
             break;
         }
     }
-    return true;
+    if (!hassource)
+        return "no SOURCE section";
+    return "";
 }
 
 // Trim trailing spaces of every line and empty lines at both ends
@@ -366,9 +419,10 @@ static void process_test(const string& testname, const fs::path& testfilepath)
     std::cout << std::left << std::setw(32) << testname << " " << std::flush;
 
     TestCase test;
-    if (!parse_test_file(testfilepath, test))
+    string parseerror = parse_test_file(testfilepath, test);
+    if (!parseerror.empty())
     {
-        test_failed("cannot read the test file");
+        test_failed(parseerror);
         return;
     }
 

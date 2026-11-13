@@ -1,5 +1,5 @@
--q -v
-----------------------------------------------------------------------
+OPTIONS = -q -v
+=== SOURCE ============================================================
 var I: Integer; B: Boolean; S: string[10]; R: Real; Rc: record X: Integer end;
 function F(X: Integer): Integer; begin F := X end;
 procedure P(var V: Integer); begin end;
@@ -29,7 +29,7 @@ begin
   Write(Rc);
   I := Abs(I, 1)
 end.
-----------------------------------------------------------------------
+=== OUTPUT ============================================================
 TEST.PAS(5,3): error 44: Type mismatch: string[255] is not compatible with Integer
 TEST.PAS(6,3): error 44: Type mismatch: Integer is not compatible with Boolean
 TEST.PAS(7,8): error 41: Unknown identifier: Q

@@ -1,5 +1,5 @@
--q -p
-----------------------------------------------------------------------
+OPTIONS = -q -p
+=== SOURCE ============================================================
 var A: Integer;
     B Integer;
     C: Char;
@@ -12,7 +12,7 @@ begin
   repeat A := A + 1 until;
   X := Y +
 end.
-----------------------------------------------------------------------
+=== OUTPUT ============================================================
 TEST.PAS(2,7): error 2: ':' expected
 TEST.PAS(6,3): error 1: ';' expected
 TEST.PAS(7,9): error 58: Illegal character after ^, control character expected

@@ -1,5 +1,5 @@
--q -p
-----------------------------------------------------------------------
+OPTIONS = -q -p
+=== SOURCE ============================================================
 procedure Show(A: Integer; var S: Str; var Any); forward;
 function Sum(X, Y: Real): Real;
   var T: Real;
@@ -17,7 +17,7 @@ function Peek(Addr: Integer): Byte; external $F003;
 overlay procedure Big; begin end;
 procedure NoParams; begin Show(1, S, X) end;
 begin NoParams end.
-----------------------------------------------------------------------
+=== OUTPUT ============================================================
 PROGRAM
   PROCEDURE Show(A: Integer; var S: Str; var Any) FORWARD
   FUNCTION Sum(X, Y: Real): Real
