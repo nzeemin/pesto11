@@ -1,0 +1,27 @@
+-q -t
+----------------------------------------------------------------------
+x @ ! ? y
+s := 'unclosed
+{$I nofile}
+{$Z+} {$R} {$W} {$}
+y := 1 { open comment
+----------------------------------------------------------------------
+1,1 IDENT x
+TEST.PAS(1,3): error 58: Illegal character '@'
+TEST.PAS(1,5): error 58: Illegal character '!'
+TEST.PAS(1,7): error 58: Illegal character '?'
+1,9 IDENT y
+2,1 IDENT s
+2,3 SYMBOL :=
+TEST.PAS(2,6): error 55: String constant exceeds line
+2,6 STRING 'unclosed'
+TEST.PAS(3,1): error 90: File not found: nofile
+TEST.PAS(4,1): error 93: Invalid compiler directive
+TEST.PAS(4,7): error 93: Invalid compiler directive: + or - expected
+TEST.PAS(4,12): error 93: Invalid compiler directive: digit expected after W
+TEST.PAS(4,17): error 93: Invalid compiler directive
+5,1 IDENT y
+5,3 SYMBOL :=
+5,6 INTEGER 1
+TEST.PAS(5,8): error 91: Unexpected end of source: comment is not closed
+6,1 EOF

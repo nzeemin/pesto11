@@ -1,0 +1,15 @@
+-q -t
+----------------------------------------------------------------------
+32768 2147483648 $10000 $ 1e x
+----------------------------------------------------------------------
+1,1 INTEGER 32768
+TEST.PAS(1,7): error 56: Error in integer constant: 2147483648
+1,7 INTEGER 2147483648
+TEST.PAS(1,18): error 56: Error in integer constant: $10000 is out of range $0000..$FFFF
+1,18 INTEGER $10000=65535
+TEST.PAS(1,25): error 56: Error in integer constant: hex digits expected after $
+1,25 INTEGER $=0
+1,27 INTEGER 1
+1,28 IDENT e
+1,30 IDENT x
+2,1 EOF

@@ -1,0 +1,17 @@
+-q -t
+----------------------------------------------------------------------
+a {$R+} b {$i-,V-} c (*$B-*) d {$R+ comment} e {$W5,X-} f {$A-,C-,U+} g
+----------------------------------------------------------------------
+1,1 IDENT a
+DIRECTIVES A+ B+ C+ I+ R+ U- V+ X+
+1,9 IDENT b
+DIRECTIVES A+ B+ C+ I- R+ U- V- X+
+1,20 IDENT c
+DIRECTIVES A+ B- C+ I- R+ U- V- X+
+1,30 IDENT d
+1,46 IDENT e
+DIRECTIVES A+ B- C+ I- R+ U- V- X-
+1,57 IDENT f
+DIRECTIVES A- B- C- I- R+ U+ V- X-
+1,71 IDENT g
+2,1 EOF

@@ -1,0 +1,40 @@
+-q -t
+----------------------------------------------------------------------
+a := b; { comment } c (* another { nested } *) d
+{ (* also nested *) } e
+(* multi
+   line *) f
+:= <> <= >= < > .. . , ; : ( ) [ ] (. .) ^ + - * / =
+----------------------------------------------------------------------
+1,1 IDENT a
+1,3 SYMBOL :=
+1,6 IDENT b
+1,7 SYMBOL ;
+1,21 IDENT c
+1,48 IDENT d
+2,23 IDENT e
+4,12 IDENT f
+5,1 SYMBOL :=
+5,4 SYMBOL <>
+5,7 SYMBOL <=
+5,10 SYMBOL >=
+5,13 SYMBOL <
+5,15 SYMBOL >
+5,17 SYMBOL ..
+5,20 SYMBOL .
+5,22 SYMBOL ,
+5,24 SYMBOL ;
+5,26 SYMBOL :
+5,28 SYMBOL (
+5,30 SYMBOL )
+5,32 SYMBOL [
+5,34 SYMBOL ]
+5,36 SYMBOL [
+5,39 SYMBOL ]
+5,42 SYMBOL ^
+5,44 SYMBOL +
+5,46 SYMBOL -
+5,48 SYMBOL *
+5,50 SYMBOL /
+5,52 SYMBOL =
+6,1 EOF

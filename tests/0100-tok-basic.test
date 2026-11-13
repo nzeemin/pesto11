@@ -1,0 +1,34 @@
+-q -t
+----------------------------------------------------------------------
+program Hello;
+VAR Count, _x1: integer;
+begin
+  WriteLn(Count Div 2, X mod 3 Shl 1)
+END.
+----------------------------------------------------------------------
+1,1 KEYWORD PROGRAM
+1,9 IDENT Hello
+1,14 SYMBOL ;
+2,1 KEYWORD VAR
+2,5 IDENT Count
+2,10 SYMBOL ,
+2,12 IDENT _x1
+2,15 SYMBOL :
+2,17 IDENT integer
+2,24 SYMBOL ;
+3,1 KEYWORD BEGIN
+4,3 IDENT WriteLn
+4,10 SYMBOL (
+4,11 IDENT Count
+4,17 KEYWORD DIV
+4,21 INTEGER 2
+4,22 SYMBOL ,
+4,24 IDENT X
+4,26 KEYWORD MOD
+4,30 INTEGER 3
+4,32 KEYWORD SHL
+4,36 INTEGER 1
+4,37 SYMBOL )
+5,1 KEYWORD END
+5,4 SYMBOL .
+6,1 EOF

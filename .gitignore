@@ -1,0 +1,40 @@
+# Build output
+/Debug
+/Release
+/x64
+/testrunner/Debug
+/testrunner/Release
+/testrunner/x64
+/pesto11-VS2022/
+/testrunner/testrunner-VS2022/
+*.o
+/pesto11
+/testrunner/testrunner
+
+# Visual Studio
+.vs
+*.user
+*.suo
+*.VC.db
+*.VC.opendb
+*.ncb
+*.sdf
+/ipch
+
+# Editors
+/.vscode
+/.idea
+
+# Test output
+/tests.temp
+
+# Local tools and references: macro11, pclink11, emulators, manuals
+/x-*
+
+# RT-11 build products in the root
+/*.MAC
+*.OBJ
+*.LST
+*.MAP
+*.SAV
+*.BIN

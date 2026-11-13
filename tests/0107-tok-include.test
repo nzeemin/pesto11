@@ -1,0 +1,17 @@
+-q -t
+----------------------------------------------------------------------
+a {$R+,I-} {$I inc } b {$I Inc2.Pas} c
+@@@ FILE INC.PAS
+{$R-,I+} x {$B-} y
+@@@ FILE INC2.PAS
+z
+----------------------------------------------------------------------
+1,1 IDENT a
+INC.PAS:1,10 IDENT x
+DIRECTIVES A+ B- C+ I+ R- U- V+ X+
+INC.PAS:1,18 IDENT y
+DIRECTIVES A+ B- C+ I- R+ U- V+ X+
+1,22 IDENT b
+INC2.PAS:1,1 IDENT z
+1,38 IDENT c
+2,1 EOF

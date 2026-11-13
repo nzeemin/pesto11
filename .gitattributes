@@ -1,0 +1,11 @@
+* text=auto
+
+# Pascal sources, tests and runtime templates are KOI8-R; keep bytes and line endings as is
+*.pas -text
+*.PAS -text
+*.test -text
+*.tmac -text
+
+*.sln text eol=crlf
+*.vcxproj text eol=crlf
+*.cmd text eol=crlf
