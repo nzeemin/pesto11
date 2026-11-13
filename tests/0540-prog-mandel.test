@@ -1,0 +1,58 @@
+OPTIONS = -q
+FRAMES = 3000
+=== SOURCE ============================================================
+program Mandel;
+{ Mandelbrot set in text, after the vibasc test 2010-mandelbrot }
+const
+  Rows = 21; Columns = 30; MaxIter = 8;
+var
+  X, Y, N: Integer;
+  CR, CI, ZR, ZI, R2, I2, VR, VI, Zoom, Scale, Sq2: Real;
+  Line: string[40];
+begin
+  Scale := 4; Sq2 := 4;
+  VR := -2.3 * Scale; VI := -1.0 * Scale; Zoom := 0.1 * Scale;
+  for Y := 0 to Rows - 1 do
+  begin
+    CI := VI + Y * Zoom;
+    Line := '';
+    for X := 0 to Columns - 1 do
+    begin
+      CR := VR + X * Zoom;
+      ZR := CR; ZI := CI;
+      N := 0;
+      R2 := ZR * ZR / Sq2; I2 := ZI * ZI / Sq2;
+      while (N < MaxIter) and (R2 + I2 <= 4 * Scale) do
+      begin
+        ZI := 2 * ZR * ZI / Sq2 + CI;
+        ZR := R2 - I2 + CR;
+        R2 := ZR * ZR / Sq2; I2 := ZI * ZI / Sq2;
+        N := N + 1
+      end;
+      Line := Line + Chr(40 - N)
+    end;
+    WriteLn(Line)
+  end
+end.
+=== SCREEN EXPECTED ===================================================
+(((((('''&&&&&&&&%%%$"  %%&&''
+(((((('&&&&&&&&%%%%$#  !$%%&&&
+((((('&&&&&&&&%%%%$#!   #$$%&&
+((((('&&&&&&&%%%$"!!     ##$%&
+(((('&&&&&&&%%$$#           %&
+(((('&&&&&%$$$$#!          "$&
+((((&&&&%$""""""            $%
+((((&%%%$$"                 #%
+((((%%%$$#!                 $%
+((((%%##"                  !$%
+(((                        "$%
+((((%%##"                  !$%
+((((%%%$$#!                 $%
+((((&%%%$$"                 #%
+((((&&&&%$""""""            $%
+(((('&&&&&%$$$$#!          "$&
+(((('&&&&&&&%%$$#           %&
+((((('&&&&&&&%%%$"!!     ##$%&
+((((('&&&&&&&&%%%%$#!   #$$%&&
+(((((('&&&&&&&&%%%%$#  !$%%&&&
+(((((('''&&&&&&&&%%%$"  %%&&''

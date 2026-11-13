@@ -1,0 +1,133 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+const N = 200;
+type Arr = array[1..N] of Integer;
+var A, B: Arr; Prime: array[2..2000] of Boolean;
+  I, J, K, Sum, Seed: Integer;
+function Rnd: Integer;
+begin
+  Seed := (Seed * 75 + 74) mod 1021; Rnd := Seed - 500
+end;
+procedure Fill;
+var I: Integer;
+begin
+  Seed := 1; for I := 1 to N do A[I] := Rnd
+end;
+function Sorted(var X: Arr): Boolean;
+var I: Integer; Ok: Boolean;
+begin
+  Ok := True;
+  for I := 1 to N - 1 do if X[I] > X[I + 1] then Ok := False;
+  Sorted := Ok
+end;
+function Total(var X: Arr): Integer;
+var I, T: Integer;
+begin
+  T := 0; for I := 1 to N do T := T + X[I]; Total := T
+end;
+procedure Bubble(var X: Arr);
+var I, J, T: Integer;
+begin
+  for I := N downto 2 do
+    for J := 1 to I - 1 do
+      if X[J] > X[J + 1] then begin T := X[J]; X[J] := X[J + 1]; X[J + 1] := T end
+end;
+procedure Insertion(var X: Arr);
+var I, J, T: Integer;
+begin
+  for I := 2 to N do
+  begin
+    T := X[I]; J := I - 1;
+    while (J >= 1) and (X[J] > T) do begin X[J + 1] := X[J]; J := J - 1 end;
+    X[J + 1] := T
+  end
+end;
+procedure Quick(var X: Arr; L, R: Integer);
+var I, J, P, T: Integer;
+begin
+  I := L; J := R; P := X[(L + R) div 2];
+  repeat
+    while X[I] < P do I := I + 1;
+    while X[J] > P do J := J - 1;
+    if I <= J then
+    begin
+      T := X[I]; X[I] := X[J]; X[J] := T; I := I + 1; J := J - 1
+    end
+  until I > J;
+  if L < J then Quick(X, L, J);
+  if I < R then Quick(X, I, R)
+end;
+procedure Shell(var X: Arr);
+var Gap, I, J, T: Integer;
+begin
+  Gap := N div 2;
+  while Gap > 0 do
+  begin
+    for I := Gap + 1 to N do
+    begin
+      T := X[I]; J := I;
+      while (J > Gap) and (X[J - Gap] > T) do begin X[J] := X[J - Gap]; J := J - Gap end;
+      X[J] := T
+    end;
+    Gap := Gap div 2
+  end
+end;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('SIEVE');
+  for I := 2 to 2000 do Prime[I] := True;
+  for I := 2 to 44 do
+    if Prime[I] then
+    begin
+      J := I * I;
+      while J <= 2000 do begin Prime[J] := False; J := J + I end
+    end;
+  K := 0; Sum := 0;
+  for I := 2 to 2000 do if Prime[I] then begin K := K + 1; Sum := (Sum + I) mod 10000 end;
+  Check(K = 303, 1); Check(Prime[1999] and not Prime[1998], 2); Check(Prime[2] and Prime[3], 3);
+  Fill; Sum := Total(A);
+  Group('BUBBLE');
+  B := A; Bubble(B); Check(Sorted(B), 1); Check(Total(B) = Sum, 2);
+  Group('INSERTION');
+  B := A; Insertion(B); Check(Sorted(B), 1); Check(Total(B) = Sum, 2);
+  Group('QUICK');
+  B := A; Quick(B, 1, N); Check(Sorted(B), 1); Check(Total(B) = Sum, 2);
+  Group('SHELL');
+  B := A; Shell(B); Check(Sorted(B), 1); Check(Total(B) = Sum, 2);
+  Check(not Sorted(A), 3);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+SIEVE        PASS   3
+BUBBLE       PASS   2
+INSERTION    PASS   2
+QUICK        PASS   2
+SHELL        PASS   3
+TOTAL PASS 12 FAIL 0

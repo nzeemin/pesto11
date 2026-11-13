@@ -1,0 +1,143 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+var A, F, G: Real; BI, Code: Integer; S: string[20];
+function Tan(X: Real): Real;
+begin
+  Tan := Sin(X) / Cos(X)
+end;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('SQRT');
+  A := Sqrt(0);
+  Check(Abs(A) < 0.00001, 1);
+  F := 0.0;
+  A := Sqrt(F);
+  Check(Abs(A) < 0.00001, 2);
+  A := Sqrt(1);
+  Check(Abs(A - 1.0) < 0.00001, 3);
+  A := Sqrt(4);
+  Check(Abs(A - 2.0) < 0.00001, 4);
+  F := 4.0;
+  A := Sqrt(F);
+  Check(Abs(A - 2.0) < 0.00001, 5);
+  A := Sqrt(9);
+  Check(Abs(A - 3.0) < 0.00001, 6);
+  BI := 9;
+  A := Sqrt(BI);
+  Check(Abs(A - 3.0) < 0.00001, 7);
+  BI := 16;
+  A := Sqrt(BI);
+  Check(Abs(A - 4.0) < 0.00001, 8);
+  A := Sqrt(2);
+  Check(Abs(A - 1.414214) < 0.00001, 9);
+  F := 2.0;
+  A := Sqrt(F);
+  Check(Abs(A - 1.414214) < 0.00001, 10);
+  A := Sqrt(3);
+  Check(Abs(A - 1.732051) < 0.00001, 11);
+  A := Sqrt(0.25);
+  Check(Abs(A - 0.5) < 0.00001, 12);
+  F := 0.25;
+  A := Sqrt(F);
+  Check(Abs(A - 0.5) < 0.00001, 13);
+  A := Sqrt(0.0001);
+  Check(Abs(A - 0.01) < 0.00001, 14);
+  A := Sqrt(100);
+  Check(Abs(A - 10.0) < 0.00001, 15);
+  F := 100.0;
+  A := Sqrt(F);
+  Check(Abs(A - 10.0) < 0.00001, 16);
+  A := Sqrt(1000000.0);
+  Check(Abs(A - 1000.0) < 0.001, 17);
+  F := 7.0;
+  A := Sqrt(F) * Sqrt(F) - F;
+  Check(Abs(A) < 0.0001, 18);
+  F := 3.5;
+  A := Sqrt(F * F) - F;
+  Check(Abs(A) < 0.0001, 19);
+  F := 8.0;
+  A := Sqrt(F + F);
+  Check(Abs(A - 4.0) < 0.00001, 20);
+  Group('SIN');
+  A := Sin(0);
+  Check(Abs(A) < 0.00001, 1);
+  F := 0.0;
+  A := Sin(F);
+  Check(Abs(A) < 0.00001, 2);
+  A := Sin(Pi/6);
+  Check(Abs(A - 0.5) < 0.00001, 3);
+  F := Pi/6;
+  A := Sin(F);
+  Check(Abs(A - 0.5) < 0.00001, 4);
+  A := Sin(Pi/4);
+  Check(Abs(A - 0.7071068) < 0.00001, 5);
+  A := Sin(Pi/2);
+  Check(Abs(A - 1.0) < 0.00001, 6);
+  F := Pi/2;
+  A := Sin(F);
+  Check((Abs(A - 1.0) < 0.00001) and (A <= 1.000001), 7);
+  A := Sin(-Pi/2);
+  Check((Abs(A + 1.0) < 0.00001) and (A >= -1.000001), 8);
+  A := Sin(1);
+  Check(Abs(A - 0.841471) < 0.00001, 9);
+  F := 1.0;
+  A := Sin(F);
+  Check(Abs(A - 0.841471) < 0.00001, 10);
+  BI := 1;
+  A := Sin(BI);
+  Check(Abs(A - 0.841471) < 0.00001, 11);
+  BI := -1;
+  A := Sin(BI);
+  Check(Abs(A + 0.841471) < 0.00001, 12);
+  A := Sin(0.5);
+  Check(Abs(A - 0.4794255) < 0.00001, 13);
+  F := 0.5;
+  A := Sin(F);
+  Check(Abs(A - 0.4794255) < 0.00001, 14);
+  A := Sin(2);
+  Check(Abs(A - 0.9092974) < 0.00001, 15);
+  A := Sin(4);
+  Check(Abs(A + 0.7568025) < 0.00001, 16);
+  F := 0.7;
+  A := Sin(-F) + Sin(F);
+  Check(Abs(A) < 0.00001, 17);
+  A := Sin(F) * Sin(F) + Cos(F) * Cos(F);
+  Check(Abs(A - 1.0) < 0.0001, 18);
+  A := Sin(F + F) - 2.0 * Sin(F) * Cos(F);
+  Check(Abs(A) < 0.0001, 19);
+  F := 1.0;
+  A := Sin(F + F);
+  Check(Abs(A - 0.9092974) < 0.00001, 20);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+SQRT         PASS  20
+SIN          PASS  20
+TOTAL PASS 40 FAIL 0

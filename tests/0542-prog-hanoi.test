@@ -1,0 +1,32 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Hanoi;
+{ Towers of Hanoi: the moves for 3 disks, and the move counts }
+var Count: Integer; Show: Boolean;
+procedure Move(N: Integer; From, To_, Via: Char);
+begin
+  if N > 0 then
+  begin
+    Move(N - 1, From, Via, To_);
+    Count := Count + 1;
+    if Show then Write(From, '-', To_, ' ');
+    Move(N - 1, Via, To_, From)
+  end
+end;
+var N: Integer;
+begin
+  Show := True; Count := 0;
+  Move(3, 'A', 'C', 'B'); WriteLn;
+  WriteLn('3 disks: ', Count, ' moves');
+  Show := False;
+  for N := 1 to 12 do
+  begin
+    Count := 0; Move(N, 'A', 'C', 'B');
+    Write(Count, ' ')
+  end;
+  WriteLn
+end.
+=== SCREEN EXPECTED ===================================================
+A-C A-B C-B A-C B-A B-C A-C
+3 disks: 7 moves
+1 3 7 15 31 63 127 255 511 1023 2047 4095

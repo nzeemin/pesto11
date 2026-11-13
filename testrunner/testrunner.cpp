@@ -138,6 +138,7 @@ static fs::path find_tool(const string& name)
 struct TestCase
 {
     string options;                     // Compiler command line options: header OPTIONS = ...
+    int frames;                         // Emulator run time in frames: header FRAMES = ..., default EMULATOR_RUN_FRAMES
     std::vector<string> source;         // Pascal source lines: section SOURCE
     std::vector<std::pair<string, std::vector<string>>> extrafiles;  // Sections SOURCE NAME.EXT: name and lines
     std::vector<string> expected;       // Expected compiler output lines, non-empty: section OUTPUT
@@ -146,7 +147,7 @@ struct TestCase
     std::vector<string> screen;         // Expected program output on the screen
     std::vector<string> keys;           // Keyboard input for the run: section KEYS INPUT
 public:
-    TestCase() : hasscreen(false) {}
+    TestCase() : frames(EMULATOR_RUN_FRAMES), hasscreen(false) {}
 };
 
 // Test file format: a header of "KEY = VALUE" lines, then named sections. A section starts
@@ -226,6 +227,12 @@ static string parse_test_file(const fs::path& path, TestCase& test)
                 string value = trim(line.substr(equal + 1));
                 if (key == "OPTIONS")
                     test.options = value;
+                else if (key == "FRAMES")
+                {
+                    test.frames = atoi(value.c_str());
+                    if (test.frames <= 0)
+                        return "bad FRAMES value: " + value;
+                }
                 else
                     return "unknown header key " + key;
             }
@@ -351,7 +358,7 @@ static string keys_to_script(const std::vector<string>& keys)
     return script;
 }
 
-static bool run_in_emulator(const fs::path& testdir, const std::vector<string>& keys, std::vector<string>& output, string& error)
+static bool run_in_emulator(const fs::path& testdir, const std::vector<string>& keys, int frames, std::vector<string>& output, string& error)
 {
     fs::path debuggerdir = g_debuggerpath.parent_path();
     std::error_code ec;
@@ -372,7 +379,7 @@ static bool run_in_emulator(const fs::path& testdir, const std::vector<string>& 
                << "reset\n" << "cf200\n" << "k 1\n" << "cf50\n" << "k ENTER\n";
         if (!keys.empty())  // RT-11 keeps the keys typed ahead until the program reads them
             script << "cf60\n" << keys_to_script(keys);
-        script << "cf" << EMULATOR_RUN_FRAMES << "\n" << "screentext\n" << "q\n";
+        script << "cf" << frames << "\n" << "screentext\n" << "q\n";
     }
     run_command(testdir, g_debuggerpath, "<TEST.script", "TEST.screen");
 
@@ -621,7 +628,7 @@ static void process_test(const string& testname, const fs::path& testfilepath)
         {
             std::vector<string> output;
             string error;
-            if (!run_in_emulator(testdir, test.keys, output, error))
+            if (!run_in_emulator(testdir, test.keys, test.frames, output, error))
             {
                 test_failed(error);
                 return;

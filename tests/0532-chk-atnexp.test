@@ -1,0 +1,149 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+var A, F, G: Real; BI, Code: Integer; S: string[20];
+function Tan(X: Real): Real;
+begin
+  Tan := Sin(X) / Cos(X)
+end;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('ARCTAN');
+  A := ArcTan(0);
+  Check(Abs(A) < 0.00001, 1);
+  A := ArcTan(1);
+  Check(Abs(A - 0.7853982) < 0.00001, 2);
+  F := 1.0;
+  A := ArcTan(F);
+  Check(Abs(A - 0.7853982) < 0.00001, 3);
+  A := ArcTan(-1);
+  Check(Abs(A + 0.7853982) < 0.00001, 4);
+  F := -1.0;
+  A := ArcTan(F);
+  Check(Abs(A + 0.7853982) < 0.00001, 5);
+  BI := 1;
+  A := ArcTan(BI);
+  Check(Abs(A - 0.7853982) < 0.00001, 6);
+  BI := -1;
+  A := ArcTan(BI);
+  Check(Abs(A + 0.7853982) < 0.00001, 7);
+  A := ArcTan(0.5);
+  Check(Abs(A - 0.4636476) < 0.00001, 8);
+  F := 0.5;
+  A := ArcTan(F);
+  Check(Abs(A - 0.4636476) < 0.00001, 9);
+  A := ArcTan(-0.5);
+  Check(Abs(A + 0.4636476) < 0.00001, 10);
+  A := ArcTan(0.1);
+  Check(Abs(A - 0.09966865) < 0.00001, 11);
+  A := ArcTan(2);
+  Check(Abs(A - 1.107149) < 0.00001, 12);
+  A := ArcTan(3);
+  Check(Abs(A - 1.249046) < 0.00001, 13);
+  F := 3.0;
+  A := ArcTan(F);
+  Check(Abs(A - 1.249046) < 0.00001, 14);
+  A := ArcTan(1000);
+  Check((Abs(A - 1.5697963) < 0.00001) and (A < Pi/2), 15);
+  F := 1000.0;
+  A := ArcTan(F);
+  Check((Abs(A - 1.5697963) < 0.00001) and (A < Pi/2), 16);
+  A := ArcTan(-1000);
+  Check((Abs(A + 1.5697963) < 0.00001) and (A > -Pi/2), 17);
+  F := 0.7;
+  A := ArcTan(-F) + ArcTan(F);
+  Check(Abs(A) < 0.00001, 18);
+  F := 1.0;
+  A := ArcTan(F) * 4 - Pi;
+  Check(Abs(A) < 0.00001, 19);
+  F := 2.0;
+  A := ArcTan(F) + ArcTan(1.0/F) - Pi/2;
+  Check(Abs(A) < 0.00001, 20);
+  F := 0.3;
+  A := Tan(ArcTan(F)) - F;
+  Check(Abs(A) < 0.00001, 21);
+  F := 1.0;
+  A := ArcTan(F + F);
+  Check(Abs(A - 1.107149) < 0.00001, 22);
+  Group('EXP');
+  A := Exp(0);
+  Check(Abs(A - 1.0) < 0.00001, 1);
+  A := Exp(1);
+  Check(Abs(A - 2.718282) < 0.00001, 2);
+  F := 1.0;
+  A := Exp(F);
+  Check(Abs(A - 2.718282) < 0.00001, 3);
+  A := Exp(-1);
+  Check(Abs(A - 0.3678794) < 0.00001, 4);
+  F := -1.0;
+  A := Exp(F);
+  Check(Abs(A - 0.3678794) < 0.00001, 5);
+  BI := 1;
+  A := Exp(BI);
+  Check(Abs(A - 2.718282) < 0.00001, 6);
+  BI := -1;
+  A := Exp(BI);
+  Check(Abs(A - 0.3678794) < 0.00001, 7);
+  A := Exp(2);
+  Check(Abs(A - 7.389056) < 0.00001, 8);
+  F := 2.0;
+  A := Exp(F);
+  Check(Abs(A - 7.389056) < 0.00001, 9);
+  A := Exp(-2);
+  Check(Abs(A - 0.1353353) < 0.00001, 10);
+  A := Exp(0.5);
+  Check(Abs(A - 1.648721) < 0.00001, 11);
+  F := 0.5;
+  A := Exp(F);
+  Check(Abs(A - 1.648721) < 0.00001, 12);
+  A := Exp(10);
+  Check(Abs(A - 22026.47) < 0.01, 13);
+  F := 10.0;
+  A := Exp(F);
+  Check(Abs(A - 22026.47) < 0.01, 14);
+  A := Exp(20);
+  Check(Abs(A - 4.851652E+08) < 4852.0, 15);
+  A := Exp(-10);
+  Check((Abs(A - 4.539993E-05) < 0.0000000001) and (A > 0.0), 16);
+  F := 0.7;
+  A := Exp(-F) * Exp(F);
+  Check(Abs(A - 1.0) < 0.00001, 17);
+  F := 0.7;
+  G := 1.3;
+  A := Exp(F) * Exp(G) - Exp(F + G);
+  Check(Abs(A) < 0.0001, 18);
+  F := 1.0;
+  A := Exp(F + F);
+  Check(Abs(A - 7.389056) < 0.00001, 19);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+ARCTAN       PASS  22
+EXP          PASS  19
+TOTAL PASS 41 FAIL 0
