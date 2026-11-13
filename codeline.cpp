@@ -22,6 +22,14 @@ static string RegisterName(int reg)
     }
 }
 
+// label, label+n or label-n
+static string LabelWithOffset(const string& label, int64_t value)
+{
+    if (value == 0)
+        return label;
+    return label + (value > 0 ? "+" : "-") + FormatNumber(value > 0 ? value : -value);
+}
+
 int Operand::ExtraWords() const
 {
     switch (mode)
@@ -52,16 +60,15 @@ string Operand::ToString() const
     case OpIndex:
     case OpIndexDeferred:
         {
-            string offset = label.empty() ? FormatNumber(value) :
-                (value == 0 ? label : label + "+" + FormatNumber(value));
+            string offset = label.empty() ? FormatNumber(value) : LabelWithOffset(label, value);
             return string(mode == OpIndexDeferred ? "@" : "") + offset + "(" + RegisterName(reg) + ")";
         }
     case OpImmediate:
-        return "#" + (label.empty() ? FormatNumber(value) : label);
+        return "#" + (label.empty() ? FormatNumber(value) : LabelWithOffset(label, value));
     case OpLabel:
-        return (value == 0) ? label : label + "+" + FormatNumber(value);
+        return LabelWithOffset(label, value);
     case OpAbsolute:
-        return "@#" + FormatNumber(value);
+        return "@#" + FormatNumber(value & 0xFFFF);
     default:
         return "";
     }

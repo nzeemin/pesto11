@@ -199,10 +199,10 @@ void Generator::GenerateProcedure(int procindex)
     EmitSourceLine(proc.name.pos);
     EmitLabel(proc.asmlabel);
 
-    // Value parameters of strings, arrays, records and sets are copied into the frame: steps 4-6
     for (const ParamGroupModel& group : proc.params)
     {
-        if (!group.isvar && group.paramtype >= 0 && !Validator::IsOrdinal(group.paramtype))
+        if (!group.isvar && group.paramtype >= 0 && !Validator::IsScalar(group.paramtype) &&
+            !Validator::IsArrayType(group.paramtype) && !Validator::IsRecordType(group.paramtype))
             EmitTodo("value parameter of type " + g_program.TypeToString(group.paramtype));
     }
 
@@ -233,6 +233,19 @@ void Generator::GenerateProcedure(int procindex)
             Emit("SUB", Operand::Imm(locals), Operand::Reg(6), "locals");
     }
 
+    // Array and record value parameters: the caller passed the address, the copy goes into the frame
+    for (const SymbolModel& symbol : g_program.symbols)
+    {
+        if (symbol.kind != SymParam || symbol.scope != proc.scope || symbol.paramoffset == 0)
+            continue;
+        if (!Validator::IsArrayType(symbol.type) && !Validator::IsRecordType(symbol.type))
+            continue;  // Strings and sets: steps 5 and 6
+        Emit("MOV", Operand::Index(5, symbol.paramoffset), Operand::Reg(3), "copy of " + symbol.name);
+        Emit("MOV", Operand::Reg(5), Operand::Reg(4));
+        Emit("SUB", Operand::Imm(-symbol.location.offset), Operand::Reg(4));
+        EmitBlockCopy(Validator::TypeSize(symbol.type), Validator::GetType(symbol.type).align >= 2);
+    }
+
     m_exitlabel = NewLabel();
     GenerateStatement(proc.block.body);
     EmitLabel(m_exitlabel);
@@ -241,7 +254,7 @@ void Generator::GenerateProcedure(int procindex)
     if (proc.kind == ProcKindFunction && proc.resultsymbol >= 0)
     {
         const SymbolModel& result = g_program.symbols[proc.resultsymbol];
-        if (!Validator::IsOrdinal(result.type))
+        if (!Validator::IsScalar(result.type))
             EmitTodo("function result of type " + g_program.TypeToString(result.type));
         else if (Validator::TypeSize(result.type) == 1)
         {
@@ -374,6 +387,130 @@ void Generator::GenerateData()
         data.push_back(MakeDataLine(slot.asmlabel, ".BLKW", "1", "temporary"));
 }
 
+// Identifiers are ASCII: compare them ignoring the case
+static bool EqualNoCase(const string& a, const string& b)
+{
+    if (a.size() != b.size())
+        return false;
+    for (size_t i = 0; i < a.size(); i++)
+    {
+        char x = a[i], y = b[i];
+        if (x >= 'a' && x <= 'z') x = (char)(x - 'a' + 'A');
+        if (y >= 'a' && y <= 'z') y = (char)(y - 'a' + 'A');
+        if (x != y)
+            return false;
+    }
+    return true;
+}
+
+// Field of a record part by name, also inside the variants
+static bool FindRecordField(const RecordPartModel& part, const string& name, int& offset, int& type)
+{
+    for (const FieldModel& field : part.fields)
+    {
+        if (EqualNoCase(field.name.text, name))
+        {
+            offset = field.offset;
+            type = field.type;
+            return true;
+        }
+    }
+    for (const VariantModel& variant : part.variants)
+    {
+        if (FindRecordField(variant.part, name, offset, type))
+            return true;
+    }
+    if (part.tagname.type != TokenTypeNone && EqualNoCase(part.tagname.text, name))
+    {
+        offset = part.tagoffset;
+        type = part.tagtype;
+        return true;
+    }
+    return false;
+}
+
+// Bytes of a typed constant value at the offset of the image; false for values not supported yet
+static bool FillConstImage(std::vector<unsigned char>& image, int offset, int type, const StructConstModel& value)
+{
+    const TypeModel& model = Validator::GetType(type);
+    int size = Validator::TypeSize(type);
+    if (value.kind == StructConstModel::ConstList)
+    {
+        if (model.kind == TypeKindArray)
+        {
+            int elemsize = Validator::TypeSize(model.elemtype);
+            for (size_t i = 0; i < value.items.size(); i++)
+            {
+                if (!FillConstImage(image, offset + (int)i * elemsize, model.elemtype, value.items[i]))
+                    return false;
+            }
+            return true;
+        }
+        for (const StructConstModel& item : value.items)
+        {
+            int fieldoffset, fieldtype;
+            if (!FindRecordField(model.record, item.fieldname.text, fieldoffset, fieldtype))
+                return false;
+            if (!FillConstImage(image, offset + fieldoffset, fieldtype, item))
+                return false;
+        }
+        return true;
+    }
+    if (value.kind == StructConstModel::ConstSet)
+    {
+        int lowbyte = (int)(model.low / 8);
+        for (const StructConstModel& item : value.items)
+        {
+            if (item.value.root < 0)
+                return false;
+            int64_t from = item.value.nodes[item.value.root].constvalue.ivalue;
+            int64_t to = item.rangeto.IsEmpty() ? from : item.rangeto.nodes[item.rangeto.root].constvalue.ivalue;
+            for (int64_t e = from; e <= to; e++)
+                image[offset + (int)(e / 8) - lowbyte] |= (unsigned char)(1 << (e % 8));
+        }
+        return true;
+    }
+
+    if (value.value.root < 0)
+        return false;
+    const ExpressionNode& node = value.value.nodes[value.value.root];
+    if (!node.isconst)
+        return false;
+    if (Validator::IsOrdinal(type))
+    {
+        int64_t v = node.constvalue.ivalue;
+        image[offset] = (unsigned char)(v & 0xFF);
+        if (size > 1)
+            image[offset + 1] = (unsigned char)((v >> 8) & 0xFF);
+        return true;
+    }
+    if (model.kind == TypeKindSet)
+    {
+        const string& bits = node.constvalue.svalue;
+        for (int i = 0; i < size; i++)
+            image[offset + i] = (unsigned char)bits[(size_t)(model.low / 8) + i];
+        return true;
+    }
+    string bytes = Validator::IsCharType(node.type) ? string(1, (char)node.constvalue.ivalue) : node.constvalue.svalue;
+    if (model.kind == TypeKindString)
+    {
+        if ((int64_t)bytes.size() > model.high)
+            bytes.resize((size_t)model.high);
+        image[offset] = (unsigned char)bytes.size();
+        for (size_t i = 0; i < bytes.size(); i++)
+            image[offset + 1 + i] = (unsigned char)bytes[i];
+        return true;
+    }
+    if (Validator::IsCharArray(type))
+    {
+        for (size_t i = 0; i < bytes.size() && (int)i < size; i++)
+            image[offset + i] = (unsigned char)bytes[i];
+        return true;
+    }
+    return false;  // Real: step 7
+}
+
+// Typed constant: the value as an image of bytes, written as words if the type is word-aligned
 void Generator::GenerateTypedConst(const SymbolModel& symbol, const StructConstModel& value)
 {
     std::vector<CodeLine>& data = m_final->data;
@@ -382,48 +519,36 @@ void Generator::GenerateTypedConst(const SymbolModel& symbol, const StructConstM
     int type = symbol.type;
     int size = Validator::TypeSize(type);
 
-    if (value.kind != StructConstModel::ConstSimple || value.value.root < 0)
+    std::vector<unsigned char> image((size_t)(size + 1), 0);
+    if (!FillConstImage(image, 0, type, value))
     {
-        data.push_back(MakeDataLine(label, ".BLKW", FormatNumber((size + 1) / 2), "TODO: structured typed constant " + comment));
+        data.push_back(MakeDataLine(label, ".BLKW", FormatNumber((size + 1) / 2), "TODO: typed constant " + comment));
         return;
     }
-    const ExpressionNode& node = value.value.nodes[value.value.root];
-    if (!node.isconst)
-        return;
-
-    if (Validator::IsOrdinal(type))
+    if (Validator::GetType(type).align < 2)
     {
-        int64_t v = node.constvalue.ivalue;
-        if (size == 1)
+        // Trailing zeros, like the unused part of a string, go into .BLKB
+        int used = size;
+        while (used > 1 && image[used - 1] == 0)
+            used--;
+        if (size - used < 4)
+            used = size;
+        AddByteLines(data, label, string(image.begin(), image.begin() + used), comment);
+        if (used < size)
+            data.push_back(MakeDataLine("", ".BLKB", FormatNumber(size - used)));
+        data.push_back(MakeDataLine("", ".EVEN", ""));
+        return;
+    }
+    for (int i = 0; i < size; i += 16)
+    {
+        string text;
+        for (int j = i; j < i + 16 && j < size; j += 2)
         {
-            data.push_back(MakeDataLine(label, ".BYTE", FormatNumber(v & 0xFF), comment));
-            data.push_back(MakeDataLine("", ".EVEN", ""));
+            int word = image[j] | (image[j + 1] << 8);
+            text += (text.empty() ? "" : ", ") + FormatNumber((int16_t)word);
         }
-        else
-            data.push_back(MakeDataLine(label, ".WORD", FormatNumber((int16_t)(v & 0xFFFF)), comment));
-        return;
+        data.push_back(MakeDataLine(i == 0 ? label : "", ".WORD", text, i == 0 ? comment : ""));
     }
-
-    string bytes = Validator::IsCharType(node.type) ? string(1, (char)node.constvalue.ivalue) : node.constvalue.svalue;
-    if (Validator::IsStringType(type))
-    {
-        int64_t maxlength = Validator::GetType(type).high;
-        if ((int64_t)bytes.size() > maxlength)
-            bytes.resize((size_t)maxlength);
-        AddByteLines(data, label, string(1, (char)bytes.size()) + bytes, comment);
-        int64_t rest = maxlength - (int64_t)bytes.size();
-        if (rest > 0)
-            data.push_back(MakeDataLine("", ".BLKB", FormatNumber(rest)));
-        data.push_back(MakeDataLine("", ".EVEN", ""));
-        return;
-    }
-    if (Validator::IsCharArray(type))
-    {
-        AddByteLines(data, label, bytes, comment);
-        data.push_back(MakeDataLine("", ".EVEN", ""));
-        return;
-    }
-    data.push_back(MakeDataLine(label, ".BLKW", FormatNumber((size + 1) / 2), "TODO: typed constant " + comment));
 }
 
 

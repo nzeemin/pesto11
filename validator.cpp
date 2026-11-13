@@ -184,6 +184,9 @@ void Validator::CreateStandardScope()
     // Mem: array[Integer] of Byte over the whole memory
     type = TypeModel(); type.kind = TypeKindArray; type.indextype = g_typeInteger; type.elemtype = g_typeByte;
     int memtype = AddType(type);
+    // MemW: array[Integer] of Integer, words at even addresses (Pesto/11 extension)
+    type.elemtype = g_typeInteger;
+    int memwtype = AddType(type);
 
     struct { const char* name; int type; } stdtypes[] =
     {
@@ -225,6 +228,7 @@ void Validator::CreateStandardScope()
         { "ConStPtr", g_typeInteger, true }, { "ConInPtr", g_typeInteger, true }, { "ConOutPtr", g_typeInteger, true },
         { "LstOutPtr", g_typeInteger, true }, { "AuxInPtr", g_typeInteger, true }, { "AuxOutPtr", g_typeInteger, true },
         { "UsrInPtr", g_typeInteger, true }, { "UsrOutPtr", g_typeInteger, true },
+        { "MemW", memwtype, false },
     };
     int stdvarindex = 0;
     for (auto& item : stdvars)
@@ -600,6 +604,11 @@ bool Validator::IsOrdinal(int type)
 {
     TypeKind kind = GetType(OrdinalBase(type)).kind;
     return kind == TypeKindInteger || kind == TypeKindChar || kind == TypeKindBoolean || kind == TypeKindEnum;
+}
+
+bool Validator::IsScalar(int type)
+{
+    return IsOrdinal(type) || IsPointerType(type);
 }
 
 bool Validator::IsIntegerType(int type) { return OrdinalBase(type) == g_typeInteger; }

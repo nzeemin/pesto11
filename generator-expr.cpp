@@ -11,79 +11,6 @@
 //////////////////////////////////////////////////////////////////////
 // Variables
 
-// Variable symbol that has a location: variables, parameters, typed constants, function results
-static bool IsVariableSymbol(const SymbolModel& symbol)
-{
-    switch (symbol.kind)
-    {
-    case SymVar: case SymTypedConst: case SymParam: case SymVarParam: case SymFuncResult:
-        return true;
-    default:
-        return false;
-    }
-}
-
-// Operand for a variable that needs no code to address: a global, a local or a parameter of the
-// current procedure (a var parameter through @n(R5)). Emits nothing; returns false otherwise.
-bool Generator::GetVariableOperand(const ExpressionModel& expr, int index, Operand& operand)
-{
-    const ExpressionNode& node = expr.nodes[index];
-    if (node.kind != NodeIdent || node.symbol < 0 || node.fieldoffset >= 0)
-        return false;
-    const SymbolModel& symbol = g_program.symbols[node.symbol];
-    if (!IsVariableSymbol(symbol) || symbol.absolutesym >= 0 || symbol.absoluteaddr >= 0)
-        return false;
-    if (!symbol.location.asmlabel.empty())
-    {
-        operand = Operand::Label(symbol.location.asmlabel);
-        return true;
-    }
-    if (symbol.level != g_program.procedures[m_procindex].level)
-        return false;  // Variable of an enclosing procedure: see PrepareVariableOperand
-    operand = symbol.indirect ? Operand::IndexDeferred(5, symbol.location.offset) : Operand::Index(5, symbol.location.offset);
-    return true;
-}
-
-// Frame of the enclosing procedure of the given level into the register, by the static chain:
-// -2(R5) is the frame of the enclosing procedure, -2 of that frame is the next one, and so on
-void Generator::EmitStaticChain(int level, int reg)
-{
-    int current = g_program.procedures[m_procindex].level;
-    assert(level < current);
-    Emit("MOV", Operand::Index(5, -2), Operand::Reg(reg), "static link");
-    for (int i = current - 1; i > level; i--)
-        Emit("MOV", Operand::Index(reg, -2), Operand::Reg(reg));
-}
-
-// Operand for a variable, emitting the address code into the register if needed:
-// a variable of an enclosing procedure is reached through the static chain
-bool Generator::PrepareVariableOperand(const ExpressionModel& expr, int index, int reg, Operand& operand)
-{
-    if (GetVariableOperand(expr, index, operand))
-        return true;
-    const ExpressionNode& node = expr.nodes[index];
-    if (node.kind != NodeIdent || node.symbol < 0 || node.fieldoffset >= 0)
-        return false;  // Fields, array elements, pointers: step 4
-    const SymbolModel& symbol = g_program.symbols[node.symbol];
-    if (!IsVariableSymbol(symbol) || symbol.absolutesym >= 0 || symbol.absoluteaddr >= 0)
-        return false;
-    if (!symbol.location.asmlabel.empty() || symbol.level >= g_program.procedures[m_procindex].level)
-        return false;
-    EmitStaticChain(symbol.level, reg);
-    operand = symbol.indirect ? Operand::IndexDeferred(reg, symbol.location.offset) : Operand::Index(reg, symbol.location.offset);
-    return true;
-}
-
-// Address of a variable as an operand: #label for a global; false otherwise for now
-bool Generator::GetVariableAddress(const ExpressionModel& expr, int index, Operand& operand)
-{
-    Operand variable;
-    if (!GetVariableOperand(expr, index, variable) || variable.mode != OpLabel)
-        return false;
-    operand = Operand::ImmLabel(variable.label);
-    return true;
-}
-
 static bool IsByteSized(int type)
 {
     return Validator::TypeSize(type) == 1;
@@ -102,12 +29,12 @@ bool Generator::GetSimpleOperand(const ExpressionModel& expr, int index, Operand
 {
     const ExpressionNode& node = expr.nodes[index];
     isbyte = false;
-    if (node.isconst && Validator::IsOrdinal(node.type))
+    if (node.isconst && Validator::IsScalar(node.type))
     {
         operand = Operand::Imm(ConstOrdinal(node));
         return true;
     }
-    if (!Validator::IsOrdinal(node.type) || !GetVariableOperand(expr, index, operand))
+    if (!Validator::IsScalar(node.type) || !GetVariableOperand(expr, index, operand))
         return false;
     isbyte = IsByteSized(node.type);
     return true;
@@ -200,7 +127,7 @@ bool Generator::GenerateValue(const ExpressionModel& expr, int index)
     if (index < 0)
         return false;
     const ExpressionNode& node = expr.nodes[index];
-    if (node.convert != ConvertNone || !Validator::IsOrdinal(node.type))
+    if (node.convert != ConvertNone || !Validator::IsScalar(node.type))
         return false;  // Real, strings, sets: later steps
 
     Operand operand;
@@ -208,22 +135,21 @@ bool Generator::GenerateValue(const ExpressionModel& expr, int index)
     if (GetSimpleOperand(expr, index, operand, isbyte))
         return LoadOrdinal(expr, index, 0);
 
-    if ((node.kind == NodeIdent || node.kind == NodeCall) && node.symbol >= 0)
+    if ((node.kind == NodeIdent || node.kind == NodeCall) && node.symbol >= 0 &&
+        g_program.symbols[node.symbol].kind == SymFunction)
+        return GenerateUserCall(expr, index);
+    if (IsDesignator(expr, index))
     {
-        const SymbolModel& symbol = g_program.symbols[node.symbol];
-        if (symbol.kind == SymFunction)
-            return GenerateUserCall(expr, index);
-        if (IsVariableSymbol(symbol) && PrepareVariableOperand(expr, index, 3, operand))
+        if (!GenerateDesignator(expr, index, 3, operand))
+            return false;
+        if (IsByteSized(node.type))
         {
-            if (IsByteSized(node.type))
-            {
-                Emit("CLR", Operand::Reg(0));
-                Emit("BISB", operand, Operand::Reg(0), node.token.text);
-            }
-            else
-                Emit("MOV", operand, Operand::Reg(0), node.token.text);
-            return true;
+            Emit("CLR", Operand::Reg(0));
+            Emit("BISB", operand, Operand::Reg(0), node.token.text);
         }
+        else
+            Emit("MOV", operand, Operand::Reg(0), node.token.text);
+        return true;
     }
 
     switch (node.kind)
@@ -514,7 +440,7 @@ bool Generator::GenerateCompare(const ExpressionModel& expr, int index, const st
     const ExpressionNode& node = expr.nodes[index];
     const ExpressionNode& left = expr.nodes[node.left];
     const ExpressionNode& right = expr.nodes[node.right];
-    if (!Validator::IsOrdinal(left.type) || !Validator::IsOrdinal(right.type) ||
+    if (!Validator::IsScalar(left.type) || !Validator::IsScalar(right.type) ||
         left.convert != ConvertNone || right.convert != ConvertNone)
         return false;  // Real, strings, sets: later steps
 
@@ -628,9 +554,19 @@ bool Generator::StoreOrdinal(const ExpressionModel& target, int index, const Sou
         }
     }
     Operand operand;
-    if (!PrepareVariableOperand(target, index, 3, operand))
+    const char* move = IsByteSized(type) ? "MOVB" : "MOV";
+    if (DesignatorUsesR0(target, index))
+    {
+        // The address code needs R0: keep the value on the stack meanwhile
+        Emit("MOV", Operand::Reg(0), Operand::AutoDec(6));
+        if (!GenerateDesignator(target, index, 3, operand))
+            return false;
+        Emit(move, Operand::AutoInc(6), operand, node.token.text);
+        return true;
+    }
+    if (!GenerateDesignator(target, index, 3, operand))
         return false;
-    Emit(IsByteSized(type) ? "MOVB" : "MOV", Operand::Reg(0), operand, node.token.text);
+    Emit(move, Operand::Reg(0), operand, node.token.text);
     return true;
 }
 
@@ -645,31 +581,19 @@ static bool IsStructuredType(int type)
 bool Generator::PushArgument(const ExpressionModel& expr, int argnode, bool isvar)
 {
     const ExpressionNode& node = expr.nodes[argnode];
-    if (isvar)
+    // var parameter, array or record value parameter: the address (the procedure copies a value)
+    bool byaddress = isvar || Validator::IsArrayType(node.type) || Validator::IsRecordType(node.type);
+    if (byaddress && node.convert == ConvertNone)
     {
         Operand operand;
-        if (!PrepareVariableOperand(expr, argnode, 3, operand))
-            return false;  // Fields, array elements: step 4
-        switch (operand.mode)
-        {
-        case OpLabel:           // Global: its address
-            Emit("MOV", Operand::ImmLabel(operand.label), Operand::AutoDec(6), node.token.text);
-            return true;
-        case OpIndexDeferred:   // var parameter: pass the address it holds
-            Emit("MOV", Operand::Index(operand.reg, operand.value), Operand::AutoDec(6), node.token.text);
-            return true;
-        case OpIndex:           // Local: frame + offset
-            Emit("MOV", Operand::Reg(operand.reg), Operand::AutoDec(6), node.token.text);
-            if (operand.value != 0)
-                Emit("ADD", Operand::Imm(operand.value), Operand::Deferred(6));
-            return true;
-        default:
+        if (!IsDesignator(expr, argnode) || !GenerateDesignator(expr, argnode, 3, operand))
             return false;
-        }
+        PushAddress(operand, node.token.text);
+        return true;
     }
 
-    if (IsStructuredType(node.type) || !Validator::IsOrdinal(node.type) || node.convert != ConvertNone)
-        return false;  // Strings, structures, Real: later steps
+    if (IsStructuredType(node.type) || !Validator::IsScalar(node.type) || node.convert != ConvertNone)
+        return false;  // Strings, sets, Real: later steps
     Operand operand;
     bool isbyte;
     if (GetSimpleOperand(expr, argnode, operand, isbyte))
@@ -698,7 +622,7 @@ bool Generator::GenerateUserCall(const ExpressionModel& expr, int index)
     const ExpressionNode& node = expr.nodes[index];
     const SymbolModel& symbol = g_program.symbols[node.symbol];
     const ProcedureModel& proc = g_program.procedures[symbol.procindex];
-    if (proc.kind == ProcKindFunction && !Validator::IsOrdinal(proc.resulttypeindex))
+    if (proc.kind == ProcKindFunction && !Validator::IsScalar(proc.resulttypeindex))
         return false;  // String and Real results: steps 5 and 7
 
     std::vector<bool> isvar;

@@ -75,6 +75,10 @@ void Generator::GenerateStatement(StatementModel& statement)
         EmitSourceLine(statement.token.pos);
         ok = GenerateGoto(statement);
         break;
+    case StmtWith:
+        EmitSourceLine(statement.token.pos);
+        ok = GenerateWith(statement);
+        break;
     default:
         EmitSourceLine(statement.token.pos);
         ok = false;
@@ -112,7 +116,8 @@ void Generator::GenerateCallStatement(StatementModel& statement)
             EmitBranch("BR", m_exitlabel, "Exit");
             return;
         }
-        EmitTodo(string("standard procedure ") + name);
+        if (!GenerateStdProcedure(name, expr, expr.root))
+            EmitTodo(string("standard procedure ") + name);
         return;
     }
     if (symbol.kind == SymProcedure)
@@ -134,8 +139,10 @@ bool Generator::GenerateAssign(StatementModel& statement)
     const ExpressionNode& targetnode = target.nodes[target.root];
     const ExpressionNode& valuenode = value.nodes[value.root];
     int type = targetnode.type;
-    if (!Validator::IsOrdinal(type))
-        return false;  // Real, strings, sets, structures: later steps
+    if (Validator::IsArrayType(type) || Validator::IsRecordType(type))
+        return GenerateStructAssign(statement);
+    if (!Validator::IsScalar(type))
+        return false;  // Real, strings, sets: later steps
 
     bool isbyte = (Validator::TypeSize(type) == 1);
     bool checked = (targetnode.token.directives & DirectiveR) != 0 &&
@@ -143,15 +150,15 @@ bool Generator::GenerateAssign(StatementModel& statement)
          Validator::GetType(type).kind == TypeKindByte);
 
     // Constant or a variable of the same size: one instruction without R0.
-    // The target may need its address in R3 first (a variable of an enclosing procedure).
+    // The target may need its address in R3 first (a field, an element, an outer variable).
     if (!checked)
     {
         Operand src, dest;
         bool srcbyte;
         if (valuenode.isconst && GetSimpleOperand(value, value.root, src, srcbyte))
         {
-            if (!PrepareVariableOperand(target, target.root, 3, dest))
-                return false;  // Arrays, records, pointers: step 4
+            if (!GenerateDesignator(target, target.root, 3, dest))
+                return false;
             int64_t v = src.value;
             if (isbyte)
                 v &= 0xFF;
@@ -163,7 +170,7 @@ bool Generator::GenerateAssign(StatementModel& statement)
         }
         if (GetSimpleOperand(value, value.root, src, srcbyte) && srcbyte == isbyte)
         {
-            if (!PrepareVariableOperand(target, target.root, 3, dest))
+            if (!GenerateDesignator(target, target.root, 3, dest))
                 return false;
             Emit(isbyte ? "MOVB" : "MOV", src, dest, targetnode.token.text);
             return true;
@@ -300,6 +307,82 @@ bool Generator::GenerateCase(StatementModel& statement)
             EmitBranch("BR", endlabel);
     }
     EmitLabel(endlabel);
+    return true;
+}
+
+// Array or record assignment: block copy from the source address in R3 to the target in R4
+bool Generator::GenerateStructAssign(StatementModel& statement)
+{
+    const ExpressionModel& target = statement.target;
+    const ExpressionModel& value = statement.expr;
+    if (!IsDesignator(value, value.root) || value.nodes[value.root].convert != ConvertNone)
+        return false;  // String constant into an array of Char: step 5
+    int type = target.nodes[target.root].type;
+    int size = Validator::TypeSize(type);
+    bool wordaligned = Validator::GetType(type).align >= 2;
+
+    // Both static and short: direct moves
+    Operand src, dest;
+    if (wordaligned && size <= 8 && GetVariableOperand(value, value.root, src) && GetVariableOperand(target, target.root, dest))
+    {
+        for (int i = 0; i < size; i += 2)
+        {
+            Operand s = src, d = dest;
+            AddOffset(s, i, 3);
+            AddOffset(d, i, 4);
+            Emit("MOV", s, d, i == 0 ? target.nodes[target.root].token.text : "");
+        }
+        return true;
+    }
+
+    if (!DesignatorUsesR0(target, target.root))
+    {
+        // The target address code touches only R4 and R1: compute it after the source
+        if (!GenerateAddress(value, value.root, 3))
+            return false;
+        if (!GenerateAddress(target, target.root, 4))
+            return false;
+    }
+    else
+    {
+        if (!GenerateAddress(target, target.root, 3))
+            return false;
+        Emit("MOV", Operand::Reg(3), Operand::AutoDec(6), "target address");
+        if (!GenerateAddress(value, value.root, 3))
+            return false;
+        Emit("MOV", Operand::AutoInc(6), Operand::Reg(4));
+    }
+    EmitBlockCopy(size, wordaligned);
+    return true;
+}
+
+// with: the record address goes into the slot once; a static record needs no slot
+bool Generator::GenerateWith(StatementModel& statement)
+{
+    std::vector<string> keys;
+    for (size_t i = 0; i < statement.withvars.size(); i++)
+    {
+        const ExpressionModel& var = statement.withvars[i];
+        const TempSlot& slot = statement.withslots[i];
+        string key = slot.ToString();
+        keys.push_back(key);
+        m_withstatic.erase(key);
+        Operand operand;
+        if (GetVariableOperand(var, var.root, operand) && (operand.mode == OpLabel || operand.mode == OpAbsolute ||
+            (operand.mode == OpIndex && operand.reg == 5)))
+        {
+            m_withstatic[key] = operand;
+            continue;
+        }
+        if (!GenerateAddress(var, var.root, 3))
+            return false;
+        Operand slotop = slot.asmlabel.empty() ? Operand::Index(5, slot.offset) : Operand::Label(slot.asmlabel);
+        Emit("MOV", Operand::Reg(3), slotop, "with " + var.nodes[var.root].token.text);
+    }
+    for (StatementModel& child : statement.statements)
+        GenerateStatement(child);
+    for (const string& key : keys)
+        m_withstatic.erase(key);
     return true;
 }
 

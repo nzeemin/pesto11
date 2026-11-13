@@ -772,6 +772,7 @@ public:
     static int  Resolve(int type);
     static const TypeModel& GetType(int type) { return g_program.types[Resolve(type)]; }
     static bool IsOrdinal(int type);
+    static bool IsScalar(int type);     // Ordinal or pointer: a value in one register
     static bool IsIntegerType(int type);
     static bool IsRealType(int type);
     static bool IsNumeric(int type) { return IsIntegerType(type) || IsRealType(type); }
@@ -881,7 +882,8 @@ public:
     Operand() : mode(OpNone), reg(0), value(0) {}
     static Operand Reg(int reg) { Operand op; op.mode = OpReg; op.reg = reg; return op; }
     static Operand Imm(int64_t value) { Operand op; op.mode = OpImmediate; op.value = value; return op; }
-    static Operand ImmLabel(const string& label) { Operand op; op.mode = OpImmediate; op.label = label; return op; }
+    static Operand ImmLabel(const string& label, int64_t offset = 0) { Operand op; op.mode = OpImmediate; op.label = label; op.value = offset; return op; }
+    static Operand Absolute(int64_t address) { Operand op; op.mode = OpAbsolute; op.value = address & 0xFFFF; return op; }
     static Operand Label(const string& label, int64_t offset = 0) { Operand op; op.mode = OpLabel; op.label = label; op.value = offset; return op; }
     static Operand Index(int reg, int64_t offset) { Operand op; op.mode = OpIndex; op.reg = reg; op.value = offset; return op; }
     static Operand IndexDeferred(int reg, int64_t offset) { Operand op; op.mode = OpIndexDeferred; op.reg = reg; op.value = offset; return op; }
@@ -974,6 +976,7 @@ class Generator
     int     m_stringcount;
     int     m_lastfile, m_lastline;         // Last source line put into a comment
     string  m_exitlabel;                    // Epilogue of the procedure being generated, for Exit
+    std::map<string, Operand> m_withstatic; // With slot -> record operand, when the record address is static
 public:
     Generator(FinalModel* final, const RuntimeGenerator* runtime);
 public:
@@ -1006,10 +1009,22 @@ private:
     bool GenerateFor(StatementModel& statement);
     bool GenerateCase(StatementModel& statement);
     bool GenerateGoto(StatementModel& statement);
-    // Expressions, generator-expr.cpp
+    bool GenerateWith(StatementModel& statement);
+    bool GenerateStructAssign(StatementModel& statement);
+    // Variables, generator-var.cpp
+    bool IsDesignator(const ExpressionModel& expr, int index) const;
+    bool DesignatorUsesR0(const ExpressionModel& expr, int index);
+    bool GetSymbolOperand(int symbol, int reg, bool emit, Operand& operand);
     bool GetVariableOperand(const ExpressionModel& expr, int index, Operand& operand);
-    bool GetVariableAddress(const ExpressionModel& expr, int index, Operand& operand);
-    bool PrepareVariableOperand(const ExpressionModel& expr, int index, int reg, Operand& operand);
+    bool GenerateDesignator(const ExpressionModel& expr, int index, int reg, Operand& operand);
+    bool GenerateElement(const ExpressionModel& expr, int index, int reg, Operand& operand);
+    bool GenerateIndex(const ExpressionModel& expr, int argnode, int reg, int64_t low, int64_t high, int size, bool check, Operand& operand);
+    bool AddOffset(Operand& operand, int64_t offset, int reg);
+    void ScaleRegister(int reg, int size);
+    void LoadAddress(const Operand& operand, int reg);
+    void PushAddress(const Operand& operand, const string& comment);
+    bool GenerateAddress(const ExpressionModel& expr, int index, int reg);
+    void EmitBlockCopy(int size, bool wordaligned);
     void EmitStaticChain(int level, int reg);
     bool GenerateUserCall(const ExpressionModel& expr, int index);
     bool PushArgument(const ExpressionModel& expr, int argnode, bool isvar);
@@ -1029,6 +1044,8 @@ private:
     void GenerateWrite(const ExpressionModel& expr, int index, bool isln);
     bool GenerateWriteItem(const ExpressionModel& expr, const ArgModel& arg);
     bool GenerateStdFunction(const ExpressionModel& expr, int index);
+    bool GenerateStdProcedure(const string& name, const ExpressionModel& expr, int index);
+    bool LoadWithWidth(const ExpressionModel& expr, const ArgModel& arg, bool isaddress);
 };
 
 // Branch layout: replace short branches that cannot reach their target, see branches.cpp

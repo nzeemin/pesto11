@@ -1,0 +1,147 @@
+-q
+------------------------------------------------------------
+program Step4;
+type
+  Vec = array[1..5] of Integer;
+  Grid = array[0..2, 1..3] of Byte;
+  Point = record X, Y: Integer; Tag: Char end;
+  PNode = ^Node;
+  Node = record Value: Integer; Next: PNode end;
+  Shape = record
+    Name: Char;
+    case Kind: Byte of
+      0: (R: Integer);
+      1: (W, H: Integer)
+  end;
+const
+  Primes: Vec = (2, 3, 5, 7, 11);
+  Origin: Point = (X: 10; Y: -20; Tag: 'O');
+  Word3: array[1..3] of Char = 'abc';
+var
+  A, B: Vec;
+  G: Grid;
+  P, Q: Point;
+  I, J, K: Integer;
+  Head, N: PNode;
+  S: Shape;
+  Pts: array[1..3] of Point;
+  W: Integer;
+  WLo: Byte absolute W;
+  Buf: array[0..9] of Char;
+  Mk: PNode;
+
+function Sum(V: Vec): Integer;
+var I, T: Integer;
+begin
+  T := 0;
+  for I := 1 to 5 do T := T + V[I];
+  V[1] := 999;  { changes only the copy }
+  Sum := T
+end;
+
+procedure Scale(var V: Vec; F: Integer);
+var I: Integer;
+begin
+  for I := 1 to 5 do V[I] := V[I] * F
+end;
+
+procedure Move2(var P: Point; DX: Integer);
+begin
+  with P do begin X := X + DX; Y := Y - DX end
+end;
+
+function Dist(P: Point): Integer;
+begin
+  Dist := Abs(P.X) + Abs(P.Y)
+end;
+
+procedure Outer;
+var L: Vec;
+  procedure Inner(K: Integer);
+  begin
+    L[K] := K * 10;
+  end;
+begin
+  for I := 1 to 5 do Inner(I);
+  WriteLn('L=', L[1], ' ', L[3], ' ', L[5]);
+end;
+
+begin
+  { arrays }
+  for I := 1 to 5 do A[I] := I * I;
+  B := A;
+  B[2] := 100;
+  WriteLn('A=', A[1], ' ', A[2], ' ', A[5], ' B2=', B[2], ' Sum=', Sum(A), ' A1=', A[1]);
+  Scale(A, 2);
+  WriteLn('Scaled ', A[1], ' ', A[5]);
+  WriteLn('Primes ', Primes[1], ' ', Primes[5], ' ', Sum(Primes));
+  for I := 0 to 2 do
+    for J := 1 to 3 do
+      G[I, J] := I * 3 + J;
+  K := 0;
+  for I := 0 to 2 do K := K + G[I][3];
+  WriteLn('G ', G[2, 1], ' ', G[1, 2], ' K=', K);
+
+  { records }
+  P := Origin;
+  WriteLn('P ', P.X, ' ', P.Y, ' ', P.Tag);
+  Move2(P, 5);
+  Q := P;
+  WriteLn('Q ', Q.X, ' ', Q.Y, ' D=', Dist(Q));
+  with Q do begin X := 1; Y := 2; Tag := 'q' end;
+  WriteLn('Q ', Q.X, Q.Y, Q.Tag);
+  for I := 1 to 3 do
+    with Pts[I] do begin X := I; Y := -I; Tag := Chr(64 + I) end;
+  WriteLn('Pts ', Pts[2].X, ' ', Pts[3].Y, ' ', Pts[1].Tag, Pts[3].Tag);
+  S.Name := 'S'; S.Kind := 1; S.W := 3; S.H := 4;
+  WriteLn('S ', S.Name, S.Kind, ' ', S.W * S.H, ' R=', S.R);
+
+  { pointers and heap }
+  Head := nil;
+  for I := 1 to 4 do
+  begin
+    New(N); N^.Value := I * 11; N^.Next := Head; Head := N
+  end;
+  N := Head; K := 0;
+  while N <> nil do begin K := K + N^.Value; N := N^.Next end;
+  WriteLn('List ', K, ' ', Head^.Value, ' ', Head^.Next^.Value);
+  W := MemAvail;
+  N := Head^.Next; Dispose(Head); Head := N;
+  New(N);
+  WriteLn('Reuse ', Ord(N = Head), ' ', MemAvail - W, ' ', MaxAvail <> 0, ' ', HeapPtr <> 0);
+  Mark(Mk);
+  for I := 1 to 10 do New(N);
+  Release(Mk);
+  WriteLn('Release ', HeapPtr = Ord(Mk));
+
+  { absolute, Mem, MemW, FillChar, Move, Addr, SizeOf }
+  W := $1234;
+  WriteLn('WLo ', WLo, ' Mem ', Mem[Addr(W)], ' ', Mem[Addr(W) + 1], ' MemW ', MemW[Addr(W)] = W);
+  MemW[Addr(W)] := 7;
+  WriteLn('W ', W, ' Size ', SizeOf(Point), ' ', SizeOf(Grid), ' ', SizeOf(Shape));
+  FillChar(Buf, SizeOf(Buf), '-');
+  Move(Word3, Buf[2], 3);
+  Write('Buf ');
+  for I := 0 to 9 do Write(Buf[I]);
+  WriteLn;
+  Outer;
+end.
+------------------------------------------------------------
+------------------------------------------------------------
+------------------------------------------------------------
+A=1 4 25 B2=100 Sum=55 A1=1
+Scaled 2 50
+Primes 2 11 28
+G 7 5 K=18
+P 10 -20 O
+Q 15 -25 D=40
+Q 12q
+Pts 2 -3 AC
+S S1 12 R=3
+List 110 44 33
+Reuse 0 0 TRUE TRUE
+Release TRUE
+WLo 52 Mem 52 18 MemW TRUE
+W 7 Size 6 9 6
+Buf --abc-----
+L=10 30 50
