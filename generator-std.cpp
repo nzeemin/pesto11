@@ -18,7 +18,8 @@ void Generator::GenerateWrite(const ExpressionModel& expr, int index, bool isln)
         int firsttype = expr.nodes[args[0].node].type;
         if (Validator::IsFileType(firsttype))
         {
-            EmitTodo("Write to a file");
+            if (!GenerateWriteFile(expr, index, isln))
+                EmitTodo("Write to a file");
             return;
         }
     }
@@ -164,6 +165,14 @@ bool Generator::GenerateStdFunction(const ExpressionModel& expr, int index)
     if (name == "KeyPressed" && node.args.empty())
     {
         EmitCall("KEYPR", "KeyPressed");
+        return true;
+    }
+    if (name == "FilePos" || name == "FileSize" || name == "IOresult" ||
+        ((name == "Eoln" || name == "Eof" || name == "SeekEof" || name == "SeekEoln") && !node.args.empty()))
+        return GenerateFileFunction(name, expr, index);
+    if ((name == "SeekEof" || name == "SeekEoln") && node.args.empty())
+    {
+        EmitCall(name == "SeekEof" ? "SEEKEO" : "SEEKEL", name);
         return true;
     }
     if (name == "Eoln" || name == "Eof")
@@ -323,6 +332,9 @@ bool Generator::GenerateStdProcedure(const string& name, const ExpressionModel& 
         return GenerateStringProcedure(name, expr, index);
     if (name == "Read" || name == "ReadLn")
         return GenerateRead(expr, index);
+    if (name == "Assign" || name == "Reset" || name == "Rewrite" || name == "Close" || name == "Erase" ||
+        name == "Rename" || name == "Seek" || name == "Flush" || name == "BlockRead" || name == "BlockWrite")
+        return GenerateFileProcedure(name, expr, index);
     if ((name == "ClrScr" || name == "ClrEol") && args.empty())
     {
         EmitCall(name == "ClrScr" ? "CLRSCR" : "CLREOL", name);
@@ -442,7 +454,12 @@ bool Generator::GenerateRead(const ExpressionModel& expr, int index)
         if (file == "Kbd")
             kbd = true;
         else if (file != "Input" && file != "Con" && file != "Trm")
-            return false;  // Files: step 9
+        {
+            if (!file.empty())
+                return false;  // Lst and others
+            bool isln = string(Validator::m_stdroutines[g_program.symbols[node.symbol].stdindex].name) == "ReadLn";
+            return GenerateReadFile(expr, index, isln);
+        }
         first = 1;
     }
 
@@ -460,6 +477,14 @@ bool Generator::GenerateRead(const ExpressionModel& expr, int index)
     }
 
     EmitCall("RDLINE", "input a line");
+    return GenerateReadItems(expr, index, first);
+}
+
+// The variables of Read from the current input: the console line or a text file
+bool Generator::GenerateReadItems(const ExpressionModel& expr, int index, size_t first)
+{
+    const ExpressionNode& node = expr.nodes[index];
+    const std::vector<ArgModel>& args = node.args;
     for (size_t i = first; i < args.size(); i++)
     {
         int arg = args[i].node;

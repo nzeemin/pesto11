@@ -163,6 +163,7 @@
     <ClCompile Include="generator.cpp" />
     <ClCompile Include="generator-stmt.cpp" />
     <ClCompile Include="generator-expr.cpp" />
+    <ClCompile Include="generator-file.cpp" />
     <ClCompile Include="generator-real.cpp" />
     <ClCompile Include="generator-set.cpp" />
     <ClCompile Include="generator-std.cpp" />

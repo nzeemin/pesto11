@@ -191,13 +191,21 @@
 
 | Имя | Вход | Действие |
 |---|---|---|
-| `FASSGN` | R0 = файл, R1 = строка с именем | `Assign` |
-| `FRESET`, `FREWRT`, `FCLOSE`, `FERASE`, `FFLUSH` | R0 = файл | `Reset`, `Rewrite`, `Close`, `Erase`, `Flush` |
-| `FRENAM` | R0 = файл, R1 = новое имя | `Rename` |
-| `FSEEK` | R0 = файл, R1 = номер записи | `Seek` |
-| `FPOS`, `FSIZE` | R0 = файл | R0 = `FilePos`, `FileSize` |
-| `FREAD`, `FWRITE` | R0 = файл, R1 = переменная | чтение и запись компонента типизированного файла |
-| `FBLKRD`, `FBLKWR` | R0 = файл, R1 = буфер, R2 = число блоков | `BlockRead`, `BlockWrite` |
+| `FASSGN` | R0 = FIB, R1 = строка с именем | `Assign`: имя в RAD50, `DK:` по умолчанию, `CON:`/`TRM:`/`KBD:` — консоль |
+| `FRESET`, `FREWRT` | R0 = FIB, R1 = длина записи, R2 = вид (0 текст, 1 типизированный, 2 нетипизированный) | `Reset` (`.LOOKUP`), `Rewrite` (`.ENTER` размером 0) |
+| `FCLOSE`, `FERASE`, `FFLUSH` | R0 = FIB | `Close` (^Z в конце текста, заголовок, `.CLOSE`), `Erase` (`.DELETE`), `Flush` |
+| `FRENAM` | R0 = FIB, R1 = новое имя | `Rename` (`.RENAME`), файл получает новое имя |
+| `FSEEK` | R0 = FIB, R1 = номер записи | `Seek`; за концом — 91 |
+| `FPOS`, `FSIZE`, `FEOFT` | R0 = FIB | R0 = `FilePos`, `FileSize`, `Eof` типизированного и нетипизированного файла |
+| `FREAD`, `FWRITE` | R0 = FIB, R1 = адрес переменной | компонент типизированного файла |
+| `FBLKRD`, `FBLKWR` | R0 = FIB, R1 = переменная, R2 = число записей, R3 = адрес `Result` или 0 | `BlockRead`, `BlockWrite`, записи по 128 байт |
+| `WRSETF`, `WRREST` | R0 = FIB / — | начало и конец `Write` в текстовый файл |
+| `RDSETF`, `RDREST` | R0 = FIB / — | начало и конец `Read` из текстового файла |
+| `RDLN` | — | `ReadLn`: пропуск до конца строки |
+| `EOFTX`, `SEEKEO`, `SEEKEL` | — | R0 = `Eof`, `SeekEof`, `SeekEoln` текущего ввода (`Eoln` — `EOLN`) |
+| `IORESV`, `IOCHK` | — | код последней I/O-ошибки; проверка при `{$I+}` |
+
+Общие подпрограммы и данные (каналы, обмен блоками, `FXFR$`) — в блоке `FCORE`. Ошибки записываются в `IORESV`, подпрограмма возвращается; при `{$I+}` генератор ставит после операции `CALL IOCHK`.
 
 `IOresult` генерируется на месте: прочитать `IORESV` и обнулить.
 

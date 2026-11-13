@@ -1067,6 +1067,13 @@ private:
     bool GenerateStdFunction(const ExpressionModel& expr, int index);
     bool GenerateStdProcedure(const string& name, const ExpressionModel& expr, int index);
     bool GenerateRead(const ExpressionModel& expr, int index);
+    bool GenerateReadItems(const ExpressionModel& expr, int index, size_t first);
+    // Files, generator-file.cpp
+    void EmitIOCheck(const ExpressionNode& node);
+    bool GenerateFileProcedure(const string& name, const ExpressionModel& expr, int index);
+    bool GenerateFileFunction(const string& name, const ExpressionModel& expr, int index);
+    bool GenerateWriteFile(const ExpressionModel& expr, int index, bool isln);
+    bool GenerateReadFile(const ExpressionModel& expr, int index, bool isln);
     // Strings, generator-str.cpp
     bool IsSimpleString(const ExpressionModel& expr, int index);
     bool LoadStringAddress(const ExpressionModel& expr, int index, int reg);

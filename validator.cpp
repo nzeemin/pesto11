@@ -23,7 +23,7 @@ int g_typeVoid = -1;
 
 bool g_showvalidation = false;
 
-const int FILE_BLOCK_SIZE = 528;    // File interface block: 512-byte buffer and the header; preliminary, DESIGN 6.4
+const int FILE_BLOCK_SIZE = 538;    // File interface block: 26-byte header and 512-byte buffer, DESIGN 6.4
 const int STRING_TYPE_SIZE = 256;   // string[255]
 
 static string ToUpperName(const string& name)

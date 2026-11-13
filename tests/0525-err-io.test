@@ -1,0 +1,14 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+var T: Text;
+begin
+  Assign(T, 'NOFILE.TXT');
+  WriteLn('before');
+  Reset(T);
+  WriteLn('never')
+end.
+=== SCREEN EXPECTED ===================================================
+before
+
+I/O error 01, PC=001074
+Program aborted

@@ -1,0 +1,101 @@
+OPTIONS = -q
+FRAMES = 2000
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+type Rec = record N: Integer; S: string[5] end;
+var T: Text; F: file of Rec; U: file; R: Rec;
+  I, J, K, Res: Integer; Line: string[40]; C: Char; X: Real;
+  Buf: array[1..256] of Byte;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('TEXT');
+  Assign(T, 'DK:TEST1.TXT'); Rewrite(T);
+  WriteLn(T, 'Hello');
+  WriteLn(T, 12, ' ', -34, ' ', 2.5:4:1);
+  Write(T, 'abc'); WriteLn(T);
+  for I := 1 to 100 do WriteLn(T, 'line ', I);
+  Close(T);
+  Reset(T);
+  ReadLn(T, Line); Check(Line = 'Hello', 1);
+  Read(T, I, J, X); Check((I = 12) and (J = -34) and (X = 2.5), 2); ReadLn(T);
+  Read(T, C); Check(C = 'a', 3); ReadLn(T, Line); Check(Line = 'bc', 4);
+  K := 0;
+  while not Eof(T) do begin ReadLn(T, Line); K := K + 1 end;
+  Check(K = 100, 5); Check(Line = 'line 100', 6);
+  Close(T);
+  Group('TEXT EOLN');
+  Reset(T); Check(not Eoln(T), 1);
+  ReadLn(T); Read(T, I); Check(not Eoln(T), 2);
+  Read(T, J, X); Check(Eoln(T), 3); Check(SeekEoln(T), 4);
+  ReadLn(T); ReadLn(T); Check(not SeekEof(T), 5);
+  Close(T);
+  Group('TYPED');
+  Assign(F, 'TEST2.DAT'); Rewrite(F);
+  for I := 1 to 50 do begin R.N := I * I; Str(I, R.S); Write(F, R) end;
+  Check(FileSize(F) = 50, 1); Check(FilePos(F) = 50, 2);
+  Close(F);
+  Reset(F); Check(FileSize(F) = 50, 3);
+  Read(F, R); Check((R.N = 1) and (R.S = '1'), 4);
+  Seek(F, 29); Read(F, R); Check((R.N = 900) and (R.S = '30'), 5); Check(FilePos(F) = 30, 6);
+  Seek(F, 49); Read(F, R); Check(R.N = 2500, 7); Check(Eof(F), 8);
+  Seek(F, 9); R.N := -1; R.S := 'X'; Write(F, R);
+  Seek(F, 50); R.N := 7; Write(F, R); Check(FileSize(F) = 51, 9);
+  Close(F);
+  Reset(F); Seek(F, 9); Read(F, R); Check((R.N = -1) and (R.S = 'X'), 10);
+  Check(FileSize(F) = 51, 11); Close(F);
+  Group('UNTYPED');
+  Assign(U, 'TEST3.BIN'); Rewrite(U);
+  for I := 1 to 256 do Buf[I] := I mod 256;
+  BlockWrite(U, Buf, 2); BlockWrite(U, Buf, 1);
+  Check(FileSize(U) = 3, 1); Close(U);
+  Reset(U); Check(FileSize(U) = 4, 2);
+  for I := 1 to 256 do Buf[I] := 0;
+  BlockRead(U, Buf, 2, Res); Check((Res = 2) and (Buf[200] = 200), 3);
+  Seek(U, 3); BlockRead(U, Buf, 2, Res); Check(Res = 1, 4);
+  Close(U);
+  Group('ERRORS');
+  {$I-}
+  Assign(T, 'NOFILE.TXT'); Reset(T); Check(IOresult = 1, 1); Check(IOresult = 0, 2);
+  Assign(T, 'TEST1.TXT'); Reset(T); Check(IOresult = 0, 3);
+  Write(T, 'x'); Check(IOresult = 3, 4); Close(T);
+  Assign(F, 'TEST2.DAT'); Reset(F); Seek(F, 100); Check(IOresult = $91, 5); Close(F);
+  Rename(F, 'TEST4.DAT'); Check(IOresult = 0, 6);
+  Assign(F, 'TEST2.DAT'); Reset(F); Check(IOresult = 1, 7);
+  Assign(F, 'TEST4.DAT'); Erase(F); Check(IOresult = 0, 8);
+  Reset(F); Check(IOresult = 1, 9);
+  {$I+}
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+TEXT         PASS   6
+TEXT EOLN    PASS   5
+TYPED        PASS  11
+UNTYPED      PASS   4
+ERRORS       PASS   9
+TOTAL PASS 35 FAIL 0

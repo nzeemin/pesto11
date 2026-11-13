@@ -23,13 +23,17 @@ INIT$S = . + 2
 
 ;#####################################################################
 ;## WRCH
-; Вывод одного символа на консоль (канал 0)
+; Вывод одного символа на консоль (канал 0) или, после WRSETF, в текстовый файл
 ; Вход: R0 = символ. Портит: ничего.
 WRCH:
+	TST	WRCH$H		; вывод в файл?
+	BNE	2$
 1$:	TSTB	@#177564	; канал 0 готов?
 	BPL	1$		; нет -- ждём
 	MOV	R0, @#177566	; передаём символ
 	RETURN
+2$:	JMP	@WRCH$H
+WRCH$H:	.WORD	0		; обработчик вывода в файл, 0 -- консоль
 
 ;#####################################################################
 ;## WRSPC
@@ -58,16 +62,16 @@ WRCHW:
 
 ;#####################################################################
 ;## WRSTR
+;## Need WRCH
 ; Вывод строки
 ; Вход: R0 = адрес строки (байт длины и символы). Портит: R0, R1, R2.
 WRSTR:
+	MOV	R0, R1
 	CLR	R2
-	BISB	(R0)+, R2	; длина строки
+	BISB	(R1)+, R2	; длина строки
 	BEQ	2$		; пустая строка
-1$:	MOVB	(R0)+, R1
-3$:	TSTB	@#177564	; канал 0 готов?
-	BPL	3$
-	MOV	R1, @#177566
+1$:	MOVB	(R1)+, R0
+	CALL	WRCH
 	SOB	R2, 1$
 2$:	RETURN
 
@@ -2590,7 +2594,10 @@ BUFLEN:	.WORD	127.
 ;## Need BUFLEN
 ; Ввод строки с консоли через RT-11 в строчном режиме: эхо, ЗАБОЙ и ^U делает RT-11.
 ; Строка -- в RDBUF, в конце ^Z; указатель чтения RDPTR -- на начало. Портит: R0, R1, R2.
+; Чтение значений идёт через RDPK$ (следующий символ) и RDNX$ (продвижение): из строки
+; консоли или, после RDSETF, из текстового файла (векторы RDIN$P, RDIN$N).
 RDLINE:
+	CLR	RDIN$P		; ввод с консоли
 	BIC	#10100, @#44	; JSW: обычный режим терминала, с ожиданием
 	MOV	#RDBUF, R1
 	MOV	BUFLEN, R2	; сколько символов можно сохранить
@@ -2609,37 +2616,61 @@ RDLINE:
 3$:	MOVB	#32, (R1)	; ^Z -- конец строки
 	MOV	#RDBUF, RDPTR
 	RETURN
-; Пропуск пробелов и табуляций. Выход: R1 = RDPTR
-RDSKP$:	MOV	RDPTR, R1
-1$:	CMPB	(R1), #40
-	BEQ	2$
-	CMPB	(R1), #11
-	BNE	3$
-2$:	INC	R1
-	BR	1$
-3$:	MOV	R1, RDPTR
+; Следующий символ без продвижения: R0 (в конце -- ^Z). Портит: ничего.
+RDPK$:	TST	RDIN$P
+	BNE	1$
+	CLR	R0
+	BISB	@RDPTR, R0
 	RETURN
-; Очередное слово строки (до пробела, табуляции или конца) в RDTOK как строка Pascal.
-; Выход: C = 1, если до конца строки слов нет. Портит: R0, R1, R2.
+1$:	JMP	@RDIN$P
+; Продвижение на символ (конец строки консоли -- на месте). Портит: ничего.
+RDNX$:	TST	RDIN$P
+	BNE	1$
+	CMPB	@RDPTR, #32
+	BEQ	2$
+	INC	RDPTR
+2$:	RETURN
+1$:	JMP	@RDIN$N
+RDIN$P:	.WORD	0
+RDIN$N:	.WORD	0
+; Пропуск пробелов, табуляций, CR и LF перед числом. Портит: R0.
+RDSKP$:	CALL	RDPK$
+	CMPB	R0, #40
+	BEQ	1$
+	CMPB	R0, #11
+	BEQ	1$
+	CMPB	R0, #15
+	BEQ	1$
+	CMPB	R0, #12
+	BNE	2$
+1$:	CALL	RDNX$
+	BR	RDSKP$
+2$:	RETURN
+; Очередное слово (до пробела, табуляции, конца строки или файла) в RDTOK как строка Pascal.
+; Выход: C = 1, если слов больше нет. Портит: R0, R2, R3.
 RDTOK$:	CALL	RDSKP$
-	CMPB	(R1), #32
-	BEQ	9$		; конец строки
+	CMPB	R0, #32
+	BEQ	9$		; конец
 	MOV	#RDTOK+1, R2
-	CLR	R0		; длина
-1$:	CMPB	(R1), #40
+	CLR	R3		; длина
+1$:	CALL	RDPK$
+	CMPB	R0, #40
 	BEQ	3$
-	CMPB	(R1), #11
+	CMPB	R0, #11
 	BEQ	3$
-	CMPB	(R1), #32
+	CMPB	R0, #15
 	BEQ	3$
-	CMP	R0, #40.
+	CMPB	R0, #12
+	BEQ	3$
+	CMPB	R0, #32
+	BEQ	3$
+	CMP	R3, #40.
 	BHIS	2$		; длиннее 40 символов: остальное не сохраняется
-	MOVB	(R1), (R2)+
-	INC	R0
-2$:	INC	R1
+	MOVB	R0, (R2)+
+	INC	R3
+2$:	CALL	RDNX$
 	BR	1$
-3$:	MOV	R1, RDPTR
-	MOVB	R0, RDTOK
+3$:	MOVB	R3, RDTOK
 	CLC
 	RETURN
 9$:	SEC
@@ -2695,49 +2726,54 @@ RDRE$R:	.WORD	0
 ;#####################################################################
 ;## RDCH
 ;## Need RDLINE
-; Read Char из строки ввода; в конце строки -- ^Z (и чтение остаётся в конце).
-; Выход: R0 = символ. Портит: R1.
+; Read Char из строки ввода или файла; в конце -- ^Z (и чтение остаётся в конце).
+; Выход: R0 = символ.
 RDCH:
-	MOV	RDPTR, R1
-	CLR	R0
-	BISB	(R1), R0
+	CALL	RDPK$
 	CMPB	R0, #32
 	BEQ	1$
-	INC	RDPTR
+	CALL	RDNX$
 1$:	RETURN
 
 ;#####################################################################
 ;## RDSTR
 ;## Need RDLINE
-; Read строки: остаток строки ввода, не длиннее максимальной длины переменной.
-; Вход: R0 = строка, R1 = максимальная длина. Портит: R2, R3, R4.
+; Read строки: до конца строки (CR) или ^Z, не длиннее максимальной длины переменной.
+; Вход: R0 = строка, R1 = максимальная длина. Портит: R0, R2, R3, R4.
 RDSTR:
+	MOV	R0, R4		; строка
 	MOV	R0, R2
 	INC	R2		; куда: первый символ
-	MOV	RDPTR, R3
-	CLR	R4		; длина
-1$:	CMP	R4, R1
+	CLR	R3		; длина
+1$:	CMP	R3, R1
 	BHIS	2$
-	CMPB	(R3), #32
+	CALL	RDPK$
+	CMPB	R0, #32
 	BEQ	2$
-	MOVB	(R3)+, (R2)+
-	INC	R4
+	CMPB	R0, #15
+	BEQ	2$
+	MOVB	R0, (R2)+
+	INC	R3
+	CALL	RDNX$
 	BR	1$
-2$:	MOVB	R4, (R0)
-	MOV	R3, RDPTR
+2$:	MOVB	R3, (R4)
 	RETURN
 
 ;#####################################################################
 ;## EOLN
 ;## Need RDLINE
-; Eoln и Eof для консоли: следующий символ строки ввода -- ^Z (конец строки).
+; Eoln (и Eof консоли): следующий символ -- конец строки (CR) или ^Z.
 ; Выход: R0 = 0/1.
 EOLN:
+	CALL	RDPK$
+	CMPB	R0, #32
+	BEQ	1$
+	CMPB	R0, #15
+	BEQ	1$
 	CLR	R0
-	CMPB	@RDPTR, #32
-	BNE	1$
-	INC	R0
-1$:	RETURN
+	RETURN
+1$:	MOV	#1, R0
+	RETURN
 
 ;#####################################################################
 ;## KEYPR
@@ -2839,3 +2875,820 @@ DELAY:
 DELA$A:	.BYTE	0, 21		; канал 0, код .GTIM
 	.WORD	DELA$T
 DELA$T:	.WORD	0, 0
+
+;#####################################################################
+;## IORESV
+; Код последней I/O-ошибки (IOresult); 0 -- ошибки не было
+IORESV:	.WORD	0
+
+;#####################################################################
+;## IOCHK
+;## Need IORESV
+;## Need RTERR
+; Проверка после операции ввода-вывода при {$I+}: код не 0 -- I/O-ошибка
+IOCHK:
+	TST	IORESV
+	BNE	1$
+	RETURN
+1$:	MOV	IORESV, R0
+	JMP	IOERR		; (SP) = адрес возврата в программу
+
+;#####################################################################
+;## FCORE
+;## Need IORESV
+; Общие подпрограммы файлов. Блок файла (FIB, DESIGN 6.4):
+;   0 FLAGS (байт): биты 0-2 -- устройство (0 диск, 1 CON:, 2 TRM:, 3 KBD:),
+;     20 -- буфер изменён, 40 -- заголовок изменён, 100 -- запись, 200 -- чтение
+;   1 CHAN (байт), 2 NAME (4 слова RAD50), 12. BLOCK, 14. POS, 16. SIZE (блоков в файле),
+;  18. RECLEN, 20. RECCNT, 22. CURREC, 24. KIND (0 текст, 1 типизированный,
+;   2 нетипизированный), 26. BUFFER (512 байт)
+; Подпрограммы получают FIB в R1, если не сказано иное, и портят R0, R2-R4.
+FCORE:				; метка блока (сам блок ничего не делает)
+FC.BLK = 12.
+FC.POS = 14.
+FC.SIZ = 16.
+FC.REC = 18.
+FC.CNT = 20.
+FC.CUR = 22.
+FC.KND = 24.
+FC.BUF = 26.
+; Свободный канал 1..14 -> R0; C = 1 -- свободных нет (F3 в IORESV)
+FCHAN$:	MOV	#1, R0
+	MOV	#2, R2		; бит канала 1
+1$:	BIT	R2, FCMAP$
+	BEQ	2$
+	INC	R0
+	ASL	R2
+	CMP	R0, #14.
+	BLOS	1$
+	MOV	#363, IORESV	; F3: слишком много открытых файлов
+	SEC
+	RETURN
+2$:	BIS	R2, FCMAP$
+	CLC
+	RETURN
+; Освободить канал R0
+FFREE$:	MOV	#1, R2
+	ASH	R0, R2
+	BIC	R2, FCMAP$
+	RETURN
+FCMAP$:	.WORD	0
+; Запрос RT-11 EMT 375: R0 = код и канал, R2, R3, R4 -- слова 1-3 области, слово 4 = 0
+FEMT$:	MOV	R0, FAREA$
+	MOV	R2, FAREA$+2
+	MOV	R3, FAREA$+4
+	MOV	R4, FAREA$+6
+	CLR	FAREA$+10
+	MOV	#FAREA$, R0
+	EMT	375
+	RETURN
+FAREA$:	.BLKW	5
+; Записать буфер, если он изменён; SIZE растёт до последнего записанного блока
+FFLSH$:	BITB	#20, (R1)
+	BEQ	2$
+	BICB	#20, (R1)
+	MOVB	1(R1), R0
+	BIS	#4400, R0	; .WRITW
+	MOV	FC.BLK(R1), R2
+	MOV	R1, R3
+	ADD	#FC.BUF, R3
+	MOV	#256., R4
+	CALL	FEMT$
+	BCC	1$
+	MOV	#360, IORESV	; F0: нет места на диске
+	TSTB	@#52
+	BEQ	2$
+	MOV	#364, IORESV	; F4: аппаратная ошибка
+	RETURN
+1$:	MOV	FC.BLK(R1), R0
+	INC	R0
+	CMP	R0, FC.SIZ(R1)
+	BLOS	2$
+	MOV	R0, FC.SIZ(R1)
+2$:	RETURN
+; Блок R0 в буфер (изменённый буфер сначала записывается). Блока в файле нет -- нули.
+FLOAD$:	CMP	R0, FC.BLK(R1)
+	BEQ	3$
+	MOV	R0, -(SP)
+	CALL	FFLSH$
+	MOV	(SP)+, FC.BLK(R1)
+	CALL	FCLR$
+	CMP	FC.BLK(R1), FC.SIZ(R1)
+	BHIS	3$
+	MOVB	1(R1), R0
+	BIS	#4000, R0	; .READW
+	MOV	FC.BLK(R1), R2
+	MOV	R1, R3
+	ADD	#FC.BUF, R3
+	MOV	#256., R4
+	CALL	FEMT$
+	BCC	3$
+	TSTB	@#52
+	BEQ	3$		; конец файла
+	MOV	#364, IORESV	; F4
+3$:	RETURN
+; Очистить буфер
+FCLR$:	MOV	R1, R3
+	ADD	#FC.BUF, R3
+	MOV	#256., R2
+1$:	CLR	(R3)+
+	SOB	R2, 1$
+	RETURN
+; Обмен с файлом через буфер: R2 = память, R3 = число байт,
+; FXOFF$ = смещение в файле (32 бита), FXDIR$ = 0 чтение, иначе запись
+FXFR$:	TST	R3
+	BLE	9$
+	MOV	R2, -(SP)
+	MOV	R3, -(SP)
+	MOV	FXOFF$, R2
+	MOV	FXOFF$+2, R3
+	ASHC	#-9., R2	; номер блока в R3
+	MOV	R3, R0
+	CALL	FLOAD$
+	MOV	FXOFF$+2, R0
+	BIC	#177000, R0	; позиция в блоке
+	MOV	#512., R4
+	SUB	R0, R4		; байт до конца блока
+	MOV	(SP)+, R3
+	MOV	(SP)+, R2
+	CMP	R4, R3
+	BLOS	1$
+	MOV	R3, R4
+1$:	ADD	R1, R0
+	ADD	#FC.BUF, R0	; адрес в буфере
+	SUB	R4, R3
+	ADD	R4, FXOFF$+2
+	ADC	FXOFF$
+	TST	FXDIR$
+	BNE	3$
+2$:	MOVB	(R0)+, (R2)+
+	SOB	R4, 2$
+	BR	FXFR$
+3$:	BISB	#20, (R1)	; буфер изменён
+4$:	MOVB	(R2)+, (R0)+
+	SOB	R4, 4$
+	BR	FXFR$
+9$:	RETURN
+FXOFF$:	.WORD	0, 0
+FXDIR$:	.WORD	0
+; Смещение текущей записи: CURREC * RECLEN (+ 4 байта заголовка типизированного файла)
+FRECO$:	MOV	FC.CUR(R1), R2
+	MUL	FC.REC(R1), R2	; R2:R3
+	MOV	R2, FXOFF$
+	MOV	R3, FXOFF$+2
+	CMP	FC.KND(R1), #1
+	BNE	1$
+	ADD	#4, FXOFF$+2
+	ADC	FXOFF$
+1$:	RETURN
+; Символ R0 в текстовый файл
+FTCH$:	CMP	FC.POS(R1), #512.
+	BLO	1$
+	MOV	R0, -(SP)
+	CALL	FFLSH$
+	INC	FC.BLK(R1)
+	CLR	FC.POS(R1)
+	CALL	FCLR$
+	MOV	(SP)+, R0
+1$:	MOV	FC.POS(R1), R2
+	ADD	R1, R2
+	MOVB	R0, FC.BUF(R2)
+	INC	FC.POS(R1)
+	BISB	#20, (R1)
+	RETURN
+; Закрыть файл, если открыт: ^Z в конце текста, заголовок типизированного файла, .CLOSE
+FCLS$:	TSTB	1(R1)
+	BEQ	8$
+	BITB	#100, (R1)
+	BEQ	5$		; только чтение
+	TST	FC.KND(R1)
+	BNE	2$
+	MOV	#32, R0		; текст: ^Z в конце
+	CALL	FTCH$
+	BR	4$
+2$:	BITB	#40, (R1)
+	BEQ	4$
+	CLR	FXOFF$		; заголовок: число записей и длина записи
+	CLR	FXOFF$+2
+	MOV	#1, FXDIR$
+	MOV	FC.CNT(R1), FHDR$
+	MOV	FC.REC(R1), FHDR$+2
+	MOV	#FHDR$, R2
+	MOV	#4, R3
+	CALL	FXFR$
+4$:	CALL	FFLSH$
+5$:	MOVB	1(R1), R0
+	MOV	R0, -(SP)
+	BIS	#3000, R0	; .CLOSE
+	EMT	374
+	MOV	(SP)+, R0
+	CALL	FFREE$
+8$:	CLRB	1(R1)
+	BICB	#370, (R1)	; режимы сброшены, устройство остаётся
+	RETURN
+FHDR$:	.WORD	0, 0
+; Начало Reset/Rewrite: R0 = FIB, R1 = длина записи, R2 = вид; выход: R1 = FIB, C = 1 -- консоль
+FOPN$:	MOV	R0, R4
+	MOV	R1, FC.REC(R4)
+	MOV	R2, FC.KND(R4)
+	MOV	R4, R1
+	CALL	FCLS$
+	CLR	FC.CUR(R1)
+	CLR	FC.CNT(R1)
+	BITB	#7, (R1)
+	BEQ	1$
+	SEC			; устройство консоли
+	RETURN
+1$:	CLC
+	RETURN
+
+;#####################################################################
+;## FASSGN
+;## Need FCORE
+; Assign(F, Name): имя в RAD50, устройство по умолчанию DK:; CON:, TRM:, KBD: -- консоль
+; Вход: R0 = FIB, R1 = строка с именем. Портит: R0-R4.
+FASSGN:
+	MOV	R0, -(SP)	; FIB
+	MOV	R1, R2		; имя прописными, без пробелов, с нулём в конце
+	CLR	R3
+	BISB	(R2)+, R3
+	MOV	#FASN$B, R4
+	TST	R3
+	BEQ	3$
+1$:	MOVB	(R2)+, R0
+	CMPB	R0, #40
+	BEQ	2$
+	CMPB	R0, #'a
+	BLO	11$
+	CMPB	R0, #'z
+	BHI	11$
+	SUB	#40, R0
+11$:	CMP	R4, #FASN$B+20.
+	BHIS	2$
+	MOVB	R0, (R4)+
+2$:	SOB	R3, 1$
+3$:	CLRB	(R4)
+	MOV	(SP)+, R1	; FIB
+	CLR	(R1)		; FLAGS и CHAN
+	MOV	#-1, FC.BLK(R1)
+	MOV	#FASN$D, R3	; устройства консоли
+	MOV	#1, R4
+4$:	MOV	#FASN$B, R2
+	MOV	R3, R0
+5$:	CMPB	(R0)+, (R2)+
+	BNE	6$
+	TSTB	-1(R0)
+	BNE	5$
+	MOVB	R4, (R1)	; устройство консоли
+	RETURN
+6$:	ADD	#6, R3
+	INC	R4
+	CMP	R4, #3
+	BLOS	4$
+	MOV	#FASN$B, R2	; есть ли ':'
+7$:	TSTB	(R2)
+	BEQ	8$
+	CMPB	(R2)+, #':
+	BNE	7$
+	MOV	#FASN$B, R2	; устройство
+	CALL	FR50$
+	MOV	R4, 2(R1)
+	INC	R2		; за ':'
+	BR	9$
+8$:	MOV	#15270, 2(R1)	; DK
+	MOV	#FASN$B, R2
+9$:	CALL	FR50$		; имя, 6 символов
+	MOV	R4, 4(R1)
+	CALL	FR50$
+	MOV	R4, 6(R1)
+10$:	TSTB	(R2)		; лишние символы имени -- до '.'
+	BEQ	12$
+	CMPB	(R2)+, #'.
+	BNE	10$
+12$:	CALL	FR50$		; тип
+	MOV	R4, 10(R1)
+	RETURN
+; До 3 символов с R2 в RAD50 -> R4; останавливается на ':', '.' и нуле. Портит: R0, R3.
+FR50$:	MOV	R1, -(SP)
+	CLR	R1
+	MOV	#3, R3
+1$:	MUL	#50, R1		; R1 нечётный: результат остаётся в R1
+	CLR	R0
+	BISB	(R2), R0
+	BEQ	3$
+	CMPB	R0, #':
+	BEQ	3$
+	CMPB	R0, #'.
+	BEQ	3$
+	INC	R2
+	CMPB	R0, #'A
+	BLO	2$
+	CMPB	R0, #'Z
+	BHI	3$
+	SUB	#100, R0	; A -> 1
+	BR	4$
+2$:	CMPB	R0, #'$
+	BNE	5$
+	MOV	#33, R0
+	BR	4$
+5$:	CMPB	R0, #'0
+	BLO	3$
+	CMPB	R0, #'9
+	BHI	3$
+	SUB	#22, R0		; 0 -> 36
+4$:	ADD	R0, R1
+3$:	SOB	R3, 1$
+	MOV	R1, R4
+	MOV	(SP)+, R1
+	RETURN
+FASN$B:	.BLKB	22.
+FASN$D:	.ASCIZ	/CON:/
+	.BYTE	0
+	.ASCIZ	/TRM:/
+	.BYTE	0
+	.ASCIZ	/KBD:/
+	.EVEN
+
+;#####################################################################
+;## FRESET
+;## Need FCORE
+; Reset(F): .LOOKUP; текст -- только чтение, остальные -- чтение и запись
+; Вход: R0 = FIB, R1 = длина записи, R2 = вид (0 текст, 1 типизированный, 2 нетипизированный)
+FRESET:
+	CALL	FOPN$
+	BCC	1$
+	BISB	#200, (R1)	; консоль: чтение
+	RETURN
+1$:	CALL	FCHAN$
+	BCS	9$
+	MOVB	R0, 1(R1)
+	BIS	#400, R0	; .LOOKUP
+	MOV	R1, R2
+	ADD	#2, R2
+	CLR	R3
+	CLR	R4
+	CALL	FEMT$
+	BCC	2$
+	MOVB	1(R1), R0
+	CALL	FFREE$
+	CLRB	1(R1)
+	MOV	#1, IORESV	; 01: файл не найден
+9$:	RETURN
+2$:	MOV	R0, FC.SIZ(R1)	; блоков в файле
+	MOV	#-1, FC.BLK(R1)
+	MOV	#512., FC.POS(R1)
+	BISB	#200, (R1)	; чтение
+	TST	FC.KND(R1)
+	BEQ	9$		; текст
+	BISB	#100, (R1)	; и запись
+	CMP	FC.KND(R1), #2
+	BNE	3$
+	MOV	FC.SIZ(R1), R0	; нетипизированный: записи по 128 байт
+	ASH	#2, R0
+	MOV	R0, FC.CNT(R1)
+	RETURN
+3$:	CLR	R0		; типизированный: число записей из заголовка
+	CALL	FLOAD$
+	MOV	FC.BUF(R1), FC.CNT(R1)
+	RETURN
+
+;#####################################################################
+;## FREWRT
+;## Need FCORE
+; Rewrite(F): .ENTER размером 0 (место отводит RT-11)
+; Вход: R0 = FIB, R1 = длина записи, R2 = вид
+FREWRT:
+	CALL	FOPN$
+	BCC	1$
+	BISB	#100, (R1)	; консоль: запись
+	RETURN
+1$:	CALL	FCHAN$
+	BCS	9$
+	MOVB	R0, 1(R1)
+	BIS	#1000, R0	; .ENTER
+	MOV	R1, R2
+	ADD	#2, R2
+	CLR	R3
+	CLR	R4
+	CALL	FEMT$
+	BCC	2$
+	MOVB	1(R1), R0
+	CALL	FFREE$
+	CLRB	1(R1)
+	MOV	#361, IORESV	; F1: нет места в каталоге или на диске
+9$:	RETURN
+2$:	CLR	FC.SIZ(R1)	; записанных блоков пока нет
+	CLR	FC.BLK(R1)
+	CLR	FC.POS(R1)
+	CALL	FCLR$
+	BISB	#100, (R1)	; запись
+	TST	FC.KND(R1)
+	BEQ	9$
+	BISB	#200, (R1)	; и чтение
+	CMP	FC.KND(R1), #1
+	BNE	9$
+	BISB	#40, (R1)	; заголовок записывается при закрытии
+	RETURN
+
+;#####################################################################
+;## FCLOSE
+;## Need FCORE
+; Close(F). Вход: R0 = FIB. Портит: R0-R4.
+FCLOSE:
+	MOV	R0, R1
+	JMP	FCLS$
+
+;#####################################################################
+;## FFLUSH
+;## Need FCORE
+; Flush(F): изменённый буфер записывается. Вход: R0 = FIB.
+FFLUSH:
+	MOV	R0, R1
+	TSTB	1(R1)
+	BEQ	1$
+	JMP	FFLSH$
+1$:	RETURN
+
+;#####################################################################
+;## FERASE
+;## Need FCORE
+; Erase(F): .DELETE закрытого файла. Вход: R0 = FIB.
+FERASE:
+	MOV	R0, R1
+	CALL	FCHAN$
+	BCS	9$
+	MOV	R0, -(SP)
+	MOV	R1, R2
+	ADD	#2, R2
+	CLR	R3
+	CLR	R4
+	CALL	FEMT$		; .DELETE (код 0)
+	BCC	1$
+	MOV	#1, IORESV	; 01: файл не найден
+1$:	MOV	(SP)+, R0
+	CALL	FFREE$
+9$:	RETURN
+
+;#####################################################################
+;## FRENAM
+;## Need FASSGN
+; Rename(F, Name): .RENAME закрытого файла, F получает новое имя. Вход: R0 = FIB, R1 = строка.
+FRENAM:
+	MOV	R0, -(SP)
+	MOV	2(R0), FRN$D	; старое имя
+	MOV	4(R0), FRN$D+2
+	MOV	6(R0), FRN$D+4
+	MOV	10(R0), FRN$D+6
+	MOV	#FRN$F, R0	; новое имя -- через Assign во временный FIB
+	CALL	FASSGN
+	MOV	FRN$F+2, FRN$D+10
+	MOV	FRN$F+4, FRN$D+12
+	MOV	FRN$F+6, FRN$D+14
+	MOV	FRN$F+10, FRN$D+16
+	CALL	FCHAN$
+	BCS	9$
+	MOV	R0, -(SP)
+	BIS	#2000, R0	; .RENAME
+	MOV	#FRN$D, R2
+	CLR	R3
+	CLR	R4
+	CALL	FEMT$
+	BCC	1$
+	MOV	#1, IORESV	; 01: файл не найден
+	MOV	(SP)+, R0
+	CALL	FFREE$
+	TST	(SP)+
+	RETURN
+1$:	MOV	(SP)+, R0
+	CALL	FFREE$
+	MOV	(SP)+, R0
+	MOV	FRN$D+10, 2(R0)
+	MOV	FRN$D+12, 4(R0)
+	MOV	FRN$D+14, 6(R0)
+	MOV	FRN$D+16, 10(R0)
+	RETURN
+9$:	TST	(SP)+
+	RETURN
+FRN$F:	.BLKW	7
+FRN$D:	.BLKW	8.
+
+;#####################################################################
+;## FSEEK
+;## Need FCORE
+; Seek(F, N): текущая запись N, 0..FileSize (за концом -- ошибка 91). Вход: R0 = FIB, R1 = N.
+FSEEK:
+	TST	R1
+	BMI	1$
+	CMP	R1, FC.CNT(R0)
+	BGT	1$
+	MOV	R1, FC.CUR(R0)
+	RETURN
+1$:	MOV	#221, IORESV	; 91: Seek за конец файла
+	RETURN
+
+;#####################################################################
+;## FPOS
+;## Need FCORE
+; FilePos(F): R0 = FIB -> R0
+FPOS:
+	MOV	FC.CUR(R0), R0
+	RETURN
+
+;#####################################################################
+;## FSIZE
+;## Need FCORE
+FSIZE:
+	MOV	FC.CNT(R0), R0
+	RETURN
+
+;#####################################################################
+;## FEOFT
+;## Need FCORE
+; Eof для типизированного и нетипизированного файла: R0 = FIB -> R0 = 0/1
+FEOFT:
+	CMP	FC.CUR(R0), FC.CNT(R0)
+	BGE	1$
+	CLR	R0
+	RETURN
+1$:	MOV	#1, R0
+	RETURN
+
+;#####################################################################
+;## FREAD
+;## Need FCORE
+; Read(F, V) типизированного файла: R0 = FIB, R1 = переменная. Портит: R0-R4.
+FREAD:
+	MOV	R1, R2
+	MOV	R0, R1
+	BITB	#200, (R1)
+	BNE	1$
+	MOV	#2, IORESV	; 02: файл не открыт для чтения
+	RETURN
+1$:	CMP	FC.CUR(R1), FC.CNT(R1)
+	BLT	2$
+	MOV	#231, IORESV	; 99: неожиданный конец файла
+	RETURN
+2$:	MOV	R2, -(SP)
+	CALL	FRECO$
+	MOV	(SP)+, R2
+	MOV	FC.REC(R1), R3
+	CLR	FXDIR$
+	CALL	FXFR$
+	INC	FC.CUR(R1)
+	RETURN
+
+;#####################################################################
+;## FWRITE
+;## Need FCORE
+; Write(F, V) типизированного файла: R0 = FIB, R1 = адрес значения. Портит: R0-R4.
+FWRITE:
+	MOV	R1, R2
+	MOV	R0, R1
+	BITB	#100, (R1)
+	BNE	1$
+	MOV	#3, IORESV	; 03: файл не открыт для записи
+	RETURN
+1$:	MOV	R2, -(SP)
+	CALL	FRECO$
+	MOV	(SP)+, R2
+	MOV	FC.REC(R1), R3
+	MOV	#1, FXDIR$
+	CALL	FXFR$
+	INC	FC.CUR(R1)
+	CMP	FC.CUR(R1), FC.CNT(R1)
+	BLE	2$
+	MOV	FC.CUR(R1), FC.CNT(R1)
+	BISB	#40, (R1)	; заголовок изменён
+2$:	RETURN
+
+;#####################################################################
+;## FBLKRD
+;## Need FCORE
+; BlockRead(F, Var, N [, Result]): записи по 128 байт.
+; Вход: R0 = FIB, R1 = переменная, R2 = число записей, R3 = адрес Result или 0. Портит: R0-R4.
+FBLKRD:
+	CLR	FXDIR$
+FBLK$:	MOV	R3, FBRES$
+	MOV	R1, FBBUF$
+	MOV	R0, R1
+	TST	R2
+	BGE	1$
+	CLR	R2
+1$:	MOV	#200, R0	; чтение
+	TST	FXDIR$
+	BEQ	2$
+	MOV	#100, R0	; запись
+2$:	BITB	R0, (R1)
+	BNE	3$
+	MOV	#2, IORESV
+	TST	FXDIR$
+	BEQ	9$
+	MOV	#3, IORESV
+9$:	RETURN
+3$:	TST	FXDIR$
+	BNE	4$
+	MOV	FC.CNT(R1), R0	; чтение: не больше, чем есть
+	SUB	FC.CUR(R1), R0
+	CMP	R2, R0
+	BLE	4$
+	MOV	R0, R2
+	TST	FBRES$
+	BNE	4$
+	MOV	#231, IORESV	; 99: без Result -- конец файла это ошибка
+4$:	MOV	R2, -(SP)
+	CALL	FRECO$
+	MOV	(SP), R3
+	ASH	#7, R3		; байт
+	MOV	FBBUF$, R2
+	CALL	FXFR$
+	MOV	(SP)+, R0
+	ADD	R0, FC.CUR(R1)
+	CMP	FC.CUR(R1), FC.CNT(R1)
+	BLE	5$
+	MOV	FC.CUR(R1), FC.CNT(R1)
+5$:	TST	FBRES$
+	BEQ	6$
+	MOV	R0, @FBRES$
+6$:	RETURN
+FBRES$:	.WORD	0
+FBBUF$:	.WORD	0
+
+;#####################################################################
+;## WRSETF
+;## Need FCORE
+;## Need WRCH
+; Начало Write в текстовый файл: вывод WRCH идёт в файл до WRREST. Вход: R0 = FIB.
+WRSETF:
+	BITB	#7, (R0)
+	BNE	2$		; устройство консоли
+	BITB	#100, (R0)
+	BNE	1$
+	MOV	#3, IORESV	; 03: не открыт для записи
+	MOV	#FWNUL$, WRCH$H
+	RETURN
+1$:	MOV	R0, FWFIB$
+	MOV	#FWRCH, WRCH$H
+	RETURN
+2$:	CLR	WRCH$H
+	RETURN
+; Обработчик WRCH для файла: символ R0 в буфер. Портит: ничего.
+FWRCH:	MOV	R0, -(SP)
+	MOV	R1, -(SP)
+	MOV	R2, -(SP)
+	MOV	R3, -(SP)
+	MOV	R4, -(SP)
+	MOV	FWFIB$, R1
+	CALL	FTCH$
+	MOV	(SP)+, R4
+	MOV	(SP)+, R3
+	MOV	(SP)+, R2
+	MOV	(SP)+, R1
+	MOV	(SP)+, R0
+FWNUL$:	RETURN
+FWFIB$:	.WORD	0
+
+;#####################################################################
+;## WRREST
+;## Need WRCH
+; Конец Write в файл: вывод снова на консоль. Портит: ничего.
+WRREST:
+	CLR	WRCH$H
+	RETURN
+
+;#####################################################################
+;## RDSETF
+;## Need FCORE
+;## Need RDLINE
+; Начало Read из текстового файла: символы берутся из файла до RDREST. Вход: R0 = FIB.
+RDSETF:
+	BITB	#7, (R0)
+	BNE	2$		; устройство консоли: новая строка, как Read без файла
+	BITB	#200, (R0)
+	BNE	1$
+	MOV	#2, IORESV	; 02: не открыт для чтения
+	MOV	#FRNUL$, RDIN$P
+	MOV	#FRNX0$, RDIN$N
+	RETURN
+1$:	MOV	R0, FRFIB$
+	MOV	#FRDPK, RDIN$P
+	MOV	#FRDNX, RDIN$N
+	RETURN
+2$:	JMP	RDLINE
+; Следующий символ файла без продвижения: ^Z в конце файла, нулевые байты пропускаются.
+; Выход: R0. Портит: ничего.
+FRDPK:	MOV	R1, -(SP)
+	MOV	R2, -(SP)
+	MOV	R3, -(SP)
+	MOV	R4, -(SP)
+	MOV	FRFIB$, R1
+1$:	CMP	FC.POS(R1), #512.
+	BLO	2$
+	MOV	FC.BLK(R1), R0
+	INC	R0
+	CMP	R0, FC.SIZ(R1)
+	BHIS	8$		; конец файла
+	CALL	FLOAD$
+	CLR	FC.POS(R1)
+2$:	MOV	FC.POS(R1), R0
+	ADD	R1, R0
+	MOVB	FC.BUF(R0), R0
+	BIC	#177400, R0
+	BNE	9$
+	INC	FC.POS(R1)	; нулевой байт
+	BR	1$
+8$:	MOV	#32, R0
+9$:	MOV	(SP)+, R4
+	MOV	(SP)+, R3
+	MOV	(SP)+, R2
+	MOV	(SP)+, R1
+	RETURN
+; Продвижение на символ. Портит: ничего.
+FRDNX:	MOV	R1, -(SP)
+	MOV	FRFIB$, R1
+	INC	FC.POS(R1)
+	MOV	(SP)+, R1
+FRNX0$:	RETURN
+FRNUL$:	MOV	#32, R0
+	RETURN
+FRFIB$:	.WORD	0
+
+;#####################################################################
+;## RDREST
+;## Need RDLINE
+; Конец Read из файла: снова консоль. Портит: ничего.
+RDREST:
+	CLR	RDIN$P
+	RETURN
+
+;#####################################################################
+;## RDLN
+;## Need RDLINE
+; ReadLn: пропуск до конца строки (за LF) или до конца файла
+RDLN:
+	CALL	RDPK$
+	CMPB	R0, #32
+	BEQ	9$
+	MOV	R0, -(SP)
+	CALL	RDNX$
+	CMP	(SP)+, #12
+	BNE	RDLN
+9$:	RETURN
+
+;#####################################################################
+;## EOFTX
+;## Need RDLINE
+; Eof текстового файла: следующий символ -- ^Z. Выход: R0 = 0/1.
+EOFTX:
+	CALL	RDPK$
+	CMPB	R0, #32
+	BEQ	1$
+	CLR	R0
+	RETURN
+1$:	MOV	#1, R0
+	RETURN
+
+;#####################################################################
+;## SEEKEO
+;## Need RDLINE
+; SeekEof: пропуск пробелов, табуляций и концов строк, затем Eof. Выход: R0 = 0/1.
+SEEKEO:
+	CALL	RDPK$
+	CMPB	R0, #40
+	BEQ	1$
+	CMPB	R0, #11
+	BEQ	1$
+	CMPB	R0, #15
+	BEQ	1$
+	CMPB	R0, #12
+	BNE	2$
+1$:	CALL	RDNX$
+	BR	SEEKEO
+2$:	CMPB	R0, #32
+	BEQ	3$
+	CLR	R0
+	RETURN
+3$:	MOV	#1, R0
+	RETURN
+
+;#####################################################################
+;## SEEKEL
+;## Need RDLINE
+;## Need EOLN
+; SeekEoln: пропуск пробелов и табуляций, затем Eoln. Выход: R0 = 0/1.
+SEEKEL:
+	CALL	RDPK$
+	CMPB	R0, #40
+	BEQ	1$
+	CMPB	R0, #11
+	BNE	2$
+1$:	CALL	RDNX$
+	BR	SEEKEL
+2$:	JMP	EOLN
+
+;#####################################################################
+;## FBLKWR
+;## Need FBLKRD
+; BlockWrite(F, Var, N [, Result]): входы как у FBLKRD
+FBLKWR:
+	MOV	#1, FXDIR$
+	JMP	FBLK$

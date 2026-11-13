@@ -38,7 +38,7 @@ PROGRAM
   TYPE Node = record Flag: Boolean; Value: Integer; Next: PNode; case Kind: Day of Mon: (X: Real); Tue: (S: string[5]; B: Byte); Wed: () end {size 14}
   TYPE Pair = record A, B: Char end {size 2}
   TYPE Mixed = record A: Char; I: Integer; C: Char end {size 6}
-  TYPE F = file of Node {size 528}
-  TYPE U = file {size 528}
+  TYPE F = file of Node {size 538}
+  TYPE U = file {size 538}
   BEGIN
     EMPTY
