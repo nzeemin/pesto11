@@ -1,0 +1,65 @@
+-q
+------------------------------------------------------------
+program Real1;
+type Pt = record X, Y: Real end;
+var
+  A, B, C: Real;
+  I: Integer;
+  P: Pt;
+  V: array[1..3] of Real;
+const
+  Half: Real = 0.5;
+  Tab: array[1..2] of Real = (1.5, -2.25);
+
+function Hyp(X, Y: Real): Real;
+begin
+  Hyp := Sqrt(X * X + Y * Y)
+end;
+
+procedure Twice(var R: Real);
+begin
+  R := R * 2
+end;
+
+begin
+  A := 1.5; B := 2; I := 7;
+  C := A * B + I / 2;
+  WriteLn(C);
+  WriteLn(C:12, C:10:3, -C:8:1, A:0:0);
+  WriteLn(1 / 3, ' ', -1.0E-10, ' ', 1.0E38);
+  WriteLn(Trunc(7.9), ' ', Round(7.5), ' ', Round(-7.5), ' ', Trunc(-7.9));
+  WriteLn(Int(-3.7):5:1, Frac(3.75):6:2, Abs(-2.5):5:1, Sqr(1.5):6:2);
+  WriteLn(Hyp(3, 4):5:2, ' ', Half:4:2, Tab[2]:6:2);
+  Twice(A);
+  P.X := A; P.Y := -A;
+  V[2] := P.X + P.Y + 1;
+  WriteLn(A:5:2, P.Y:6:2, V[2]:5:2);
+  if A > B then Write('gt ') else Write('le ');
+  if A = 3 then Write('eq ');
+  if -A < B then Write('lt ');
+  WriteLn(A >= 3.0, ' ', B <> 2);
+  WriteLn(Sin(Pi / 6):8:5, Cos(0):8:5, ArcTan(1) * 4:8:5);
+  WriteLn(Exp(1):8:5, Ln(10):8:5, Sqrt(2):8:5);
+  WriteLn(123456.7:10:1, 0.000123:10:6, 1E10:4:0);
+  WriteLn(1.0E-30 * 1.0E-30, ' ', 9.9999995:8:3);
+  C := 1.0E30;
+  C := C * C
+end.
+------------------------------------------------------------
+------------------------------------------------------------
+------------------------------------------------------------
+  6.500000E+00
+6.500000E+00     6.500    -6.52
+  3.333333E-01  -1.000000E-10   1.000000E+38
+7 8 -8 -7
+ -3.0  0.75  2.5  2.25
+ 5.00 0.50 -2.25
+ 3.00 -3.00 1.00
+gt eq lt TRUE FALSE
+ 0.50000 1.00000 3.14159
+ 2.71828 2.30259 1.41421
+  123456.7  0.00012310000000000
+  0.000000E+00   10.000
+
+Run-time error 01, PC=003262
+Program aborted

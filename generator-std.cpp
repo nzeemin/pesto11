@@ -95,7 +95,22 @@ bool Generator::GenerateWriteItem(const ExpressionModel& expr, const ArgModel& a
         return true;
     }
 
-    return false;  // Real and the rest: later steps
+    if (Validator::IsRealType(type) || node.convert == ConvertIntToReal)
+    {
+        // Real on the stack, width in R1 and decimals in R2 (-1: not given)
+        if (!GenerateReal(expr, arg.node))
+            return false;
+        std::vector<RuntimeArg> args;
+        args.push_back(RuntimeArg(RuntimeArg::Value, arg.width, 1));
+        args.push_back(RuntimeArg(RuntimeArg::Value, arg.decimals, 2));
+        int buffers;
+        if (!LoadRuntimeArgs(expr, args, buffers))
+            return false;
+        EmitCall("WRREAL");
+        return true;
+    }
+
+    return false;
 }
 
 
@@ -146,6 +161,16 @@ bool Generator::GenerateStdFunction(const ExpressionModel& expr, int index)
     }
     if (name == "Length" || name == "Pos")
         return GenerateStringFunction(name, expr, index);
+    if ((name == "Trunc" || name == "Round") && node.args.size() == 1)
+        return GenerateRealToInteger(name, expr, node.args[0].node);
+    if (name == "Random" && node.args.size() == 1)
+    {
+        if (!LoadOrdinal(expr, node.args[0].node, 0))
+            return false;
+        EmitCall("FRNDI", "Random(N)");
+        m_usesreal = true;
+        return true;
+    }
     if (node.args.size() != 1)
         return false;
     int arg = node.args[0].node;
@@ -277,6 +302,11 @@ bool Generator::GenerateStdProcedure(const string& name, const ExpressionModel& 
     }
     if (name == "Insert" || name == "Delete" || name == "Str" || name == "Val")
         return GenerateStringProcedure(name, expr, index);
+    if (name == "Randomize" && args.empty())
+    {
+        EmitCall("RANDZ", "Randomize");
+        return true;
+    }
     if (name == "Release" && args.size() == 1)
     {
         if (!LoadOrdinal(expr, args[0].node, 0))

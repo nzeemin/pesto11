@@ -1,0 +1,131 @@
+-q
+------------------------------------------------------------
+type P = record X, Y: Real end;
+var A, B: Real; I: Integer; Q: P; V: array[1..4] of Real;
+function F(X: Real; var Y: Real): Real;
+begin
+  Y := X * 2;
+  F := Y + 0.5
+end;
+begin
+  A := 1.5;
+  B := A * I - 2;
+  Q.Y := F(B, Q.X);
+  V[I] := -Q.Y;
+  if A < B then I := Round(A) else I := Trunc(B / 3);
+  WriteLn(A:8:2, Sqrt(B))
+end.
+------------------------------------------------------------
+------------------------------------------------------------
+	.TITLE	TEST
+	.GLOBL	FCMP, FISOFF, FISON, FROUND, FSQR, FTOI, ITOF, WREOL, WRREAL
+START::
+	MTPS	#340
+	CLR	@#177560
+	MTPS	#0
+	MOV	SP, INIT$S
+	MOV	#-2, R0
+	EMT	354
+	BIC	#1, R0
+	MOV	R0, SP
+	CALL	FISON
+	CLR	-(SP)
+	MOV	#16576., -(SP)
+	MOV	(SP)+, V00001
+	MOV	(SP)+, V00001+2.
+	MOV	V00001+2., -(SP)
+	MOV	V00001, -(SP)
+	MOV	V00003, R0
+	CALL	ITOF
+	FMUL	SP
+	CLR	-(SP)
+	MOV	#16640., -(SP)
+	FSUB	SP
+	MOV	(SP)+, V00002
+	MOV	(SP)+, V00002+2.
+	CMP	-(SP), -(SP)
+	MOV	V00002+2., -(SP)
+	MOV	V00002, -(SP)
+	MOV	#V00004, -(SP)
+	CALL	P00001
+	MOV	(SP)+, V00004+4.
+	MOV	(SP)+, V00004+6.
+	MOV	V00004+6., -(SP)
+	MOV	V00004+4., -(SP)
+	TST	(SP)
+	BEQ	L00001
+	ADD	#-32768., (SP)
+L00001:
+	MOV	V00003, R3
+	ASL	R3
+	ASL	R3
+	MOV	(SP)+, V00005-4.(R3)
+	MOV	(SP)+, V00005-2.(R3)
+	MOV	V00001+2., -(SP)
+	MOV	V00001, -(SP)
+	MOV	V00002+2., -(SP)
+	MOV	V00002, -(SP)
+	CALL	FCMP
+	BGE	L00002
+	MOV	V00001+2., -(SP)
+	MOV	V00001, -(SP)
+	CALL	FROUND
+	MOV	R0, V00003
+	BR	L00003
+L00002:
+	MOV	V00002+2., -(SP)
+	MOV	V00002, -(SP)
+	CLR	-(SP)
+	MOV	#16704., -(SP)
+	FDIV	SP
+	CALL	FTOI
+	MOV	R0, V00003
+L00003:
+	MOV	V00001+2., -(SP)
+	MOV	V00001, -(SP)
+	MOV	#8., R1
+	MOV	#2., R2
+	CALL	WRREAL
+	MOV	V00002+2., -(SP)
+	MOV	V00002, -(SP)
+	CALL	FSQR
+	MOV	#-1., R1
+	MOV	#-1., R2
+	CALL	WRREAL
+	CALL	WREOL
+HALT::
+	CALL	FISOFF
+INIT$S = . + 2
+	MOV	#776, SP
+	EMT	350
+P00001:
+	MOV	R5, -(SP)
+	MOV	SP, R5
+	MOV	8.(R5), -(SP)
+	MOV	6.(R5), -(SP)
+	CLR	-(SP)
+	MOV	#16640., -(SP)
+	FMUL	SP
+	MOV	4.(R5), R3
+	MOV	(SP)+, (R3)
+	MOV	(SP)+, 2.(R3)
+	MOV	4.(R5), R3
+	MOV	2.(R3), -(SP)
+	MOV	(R3), -(SP)
+	CLR	-(SP)
+	MOV	#16384., -(SP)
+	FADD	SP
+	MOV	(SP)+, 10.(R5)
+	MOV	(SP)+, 12.(R5)
+L00004:
+	MOV	R5, SP
+	MOV	(SP)+, R5
+	MOV	(SP), 6.(SP)
+	ADD	#6., SP
+	RETURN
+V00001:	.BLKW	2.
+V00002:	.BLKW	2.
+V00003:	.BLKW	1.
+V00004:	.BLKW	4.
+V00005:	.BLKW	8.
+	.END	START

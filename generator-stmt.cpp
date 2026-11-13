@@ -145,6 +145,8 @@ bool Generator::GenerateAssign(StatementModel& statement)
         return GenerateStringAssign(statement);
     if (Validator::IsSetType(type))
         return GenerateSetAssign(statement);
+    if (Validator::IsRealType(type))
+        return GenerateReal(value, value.root) && StoreReal(target, target.root);
     if (Validator::IsArrayType(type) || Validator::IsRecordType(type))
         return GenerateStructAssign(statement);
     if (!Validator::IsScalar(type))

@@ -936,6 +936,7 @@ struct FinalModel
 extern std::vector<std::vector<string>> g_sourcelines;  // Source lines by file index, for comments
 
 string FormatNumber(int64_t value);     // Decimal number for macro11: "12." or "-4."
+bool RealToDecF(double value, uint16_t& high, uint16_t& low);  // DEC F_floating words, see codeline.cpp
 
 
 //////////////////////////////////////////////////////////////////////
@@ -995,6 +996,8 @@ class Generator
     string  m_exitlabel;                    // Epilogue of the procedure being generated, for Exit
     std::map<string, Operand> m_withstatic; // With slot -> record operand, when the record address is static
     int     m_setrangetype;                 // Set type whose range checks constructor elements, -1: their own type
+    bool    m_usesreal;                     // Real code was generated: the FIS trap handler is needed
+    size_t  m_initend;                      // Line after the INIT block in the program code
 public:
     Generator(FinalModel* final, const RuntimeGenerator* runtime);
 public:
@@ -1075,6 +1078,15 @@ private:
     bool GenerateStringFunction(const string& name, const ExpressionModel& expr, int index);
     bool GenerateStringProcedure(const string& name, const ExpressionModel& expr, int index);
     string GetDataLabel(const string& bytes);
+    // Real, generator-real.cpp
+    void PushRealConst(double value);
+    void EmitFis(const char* opcode);
+    bool GenerateReal(const ExpressionModel& expr, int index);
+    bool PrepareRealOperand(Operand& operand, int reg);
+    bool StoreReal(const ExpressionModel& target, int index);
+    bool GenerateRealCompare(const ExpressionModel& expr, int index, const string& label, bool jumpiftrue);
+    bool GenerateRealFunction(const string& name, const ExpressionModel& expr, int index);
+    bool GenerateRealToInteger(const string& name, const ExpressionModel& expr, int arg);
     // Sets, generator-set.cpp
     bool GenerateSetBuffer(const ExpressionModel& expr, int index);
     bool GenerateSetAssign(StatementModel& statement);

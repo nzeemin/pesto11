@@ -137,9 +137,14 @@ int Validator::ValidateNode(ExpressionModel& expr, int index, bool negated)
         }
         break;
     case NodeReal:
-        node.isconst = true;
-        node.constvalue.dvalue = node.token.dvalue;
-        type = g_typeReal;
+        {
+            node.isconst = true;
+            node.constvalue.dvalue = node.token.dvalue;
+            type = g_typeReal;
+            uint16_t high, low;
+            if (!RealToDecF(node.constvalue.dvalue, high, low))
+                Error(node.token.pos, 57, "Error in real constant: " + node.token.text + " is out of the Real range");
+        }
         break;
     case NodeString:
         node.isconst = true;
@@ -709,7 +714,12 @@ int Validator::ValidateBinary(ExpressionModel& expr, int index)
                     if (isslash && b == 0.0)
                         bothconst = false;  // Division by zero: run-time error 02
                     else
+                    {
                         value.dvalue = isplus ? a + b : isminus ? a - b : isstar ? a * b : a / b;
+                        uint16_t high, low;
+                        if (!RealToDecF(value.dvalue, high, low))
+                            bothconst = false;  // Overflow or underflow: left to run time
+                    }
                 }
             }
         }

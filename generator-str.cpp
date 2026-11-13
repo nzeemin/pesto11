@@ -468,10 +468,37 @@ bool Generator::GenerateStringProcedure(const string& name, const ExpressionMode
         EmitCall("DELETE");
         return true;
     }
+    if (name == "Str" && a.size() == 2 && Validator::IsRealType(expr.nodes[a[0].node].type))
+    {
+        // Real on the stack; R0 = string, R1 = width, R2 = decimals, R3 = maximum length
+        if (!GenerateReal(expr, a[0].node))
+            return false;
+        args.push_back(RuntimeArg(RuntimeArg::Address, a[1].node, 0));
+        args.push_back(RuntimeArg(RuntimeArg::Value, a[0].width, 1));
+        args.push_back(RuntimeArg(RuntimeArg::Value, a[0].decimals, 2));
+        args.push_back(RuntimeArg(RuntimeArg::Immediate, -1, 3, StringMaxLength(expr.nodes[a[1].node].type)));
+        if (!LoadRuntimeArgs(expr, args, buffers))
+            return false;
+        EmitCall("STRR");
+        return true;
+    }
+    if (name == "Val" && a.size() == 3 && Validator::IsRealType(expr.nodes[a[1].node].type))
+    {
+        // VALR leaves the Real on the stack and the error position above it
+        args.push_back(RuntimeArg(RuntimeArg::StringValue, a[0].node, 0));
+        if (!LoadRuntimeArgs(expr, args, buffers))
+            return false;
+        EmitCall("VALR", "Real and the error position onto the stack");
+        Emit("MOV", Operand::AutoInc(6), Operand::Reg(0), "error position");
+        if (!StoreOrdinal(expr, a[2].node, node.token.pos) || !StoreReal(expr, a[1].node))
+            return false;
+        FreeBuffers(buffers);
+        return true;
+    }
     if (name == "Str" && a.size() == 2)
     {
         if (!Validator::IsIntegerType(expr.nodes[a[0].node].type))
-            return false;  // Real: step 7
+            return false;
         args.push_back(RuntimeArg(RuntimeArg::Value, a[0].node, 0));
         args.push_back(RuntimeArg(RuntimeArg::Value, a[0].width, 1));
         args.push_back(RuntimeArg(RuntimeArg::Address, a[1].node, 2));
@@ -484,7 +511,7 @@ bool Generator::GenerateStringProcedure(const string& name, const ExpressionMode
     if (name == "Val" && a.size() == 3)
     {
         if (!Validator::IsIntegerType(expr.nodes[a[1].node].type))
-            return false;  // Real: step 7
+            return false;
         args.push_back(RuntimeArg(RuntimeArg::StringValue, a[0].node, 0));
         if (!LoadRuntimeArgs(expr, args, buffers))
             return false;

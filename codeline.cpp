@@ -1,4 +1,6 @@
 
+#include <cmath>
+
 #include "main.h"
 
 // Generator output model: operands and assembly lines.
@@ -100,6 +102,34 @@ string CodeLine::ToString() const
     if (!comment.empty())
         result += "\t; " + comment;
     return result;
+}
+
+
+//////////////////////////////////////////////////////////////////////
+
+// Real value as DEC F_floating, rounded to nearest: sign, 8-bit exponent excess 128, 23-bit fraction
+// with a hidden bit; the high word comes first in memory. False if out of the DEC F range.
+bool RealToDecF(double value, uint16_t& high, uint16_t& low)
+{
+    high = low = 0;
+    if (value == 0.0)
+        return true;
+    bool negative = value < 0.0;
+    int exponent;
+    double fraction = std::frexp(negative ? -value : value, &exponent);  // [0.5, 1)
+    uint32_t mantissa = (uint32_t)std::floor(std::ldexp(fraction, 24) + 0.5);
+    if (mantissa >= (1u << 24))
+    {
+        mantissa >>= 1;
+        exponent++;
+    }
+    int biased = exponent + 128;
+    if (biased <= 0 || biased > 255)
+        return false;
+    mantissa &= 0x7FFFFF;  // Hidden bit
+    high = (uint16_t)((negative ? 0x8000 : 0) | (biased << 7) | (mantissa >> 16));
+    low = (uint16_t)(mantissa & 0xFFFF);
+    return true;
 }
 
 

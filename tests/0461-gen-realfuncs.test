@@ -1,0 +1,52 @@
+-q
+------------------------------------------------------------
+program Real2;
+var
+  R: Real;
+  S: string[30];
+  I, Code, K: Integer;
+  Hit: array[0..9] of Integer;
+begin
+  Str(3.14159:8:3, S); WriteLn('[', S, ']');
+  Str(-2.5E-7, S); WriteLn('[', S, ']');
+  Str(1234.5:10, S); WriteLn('[', S, ']');
+  Val('12.5', R, Code); WriteLn(R:6:2, ' ', Code);
+  Val('-1.25E3', R, Code); WriteLn(R:8:1, ' ', Code);
+  Val('7', R, Code); WriteLn(R:4:1, ' ', Code);
+  Val('3e-2', R, Code); WriteLn(R:6:3, ' ', Code);
+  Val('1.', R, Code); Write(Code);
+  Val('.5', R, Code); Write(' ', Code);
+  Val('1.5x', R, Code); Write(' ', Code);
+  Val('1E99', R, Code); WriteLn(' ', Code);
+  Val('0.1', R, Code); WriteLn(R, ' ', R * 10 = 1);
+  for I := 0 to 9 do Hit[I] := 0;
+  for I := 1 to 200 do
+  begin
+    K := Random(10);
+    Hit[K] := Hit[K] + 1
+  end;
+  K := 0;
+  for I := 0 to 9 do if Hit[I] > 0 then K := K + 1;
+  R := Random;
+  WriteLn('Random ', K, ' ', (R >= 0) and (R < 1));
+  Randomize;
+  WriteLn('Big ', 1.7E38:1, ' Small ', 3E-39:1);
+  WriteLn(Sqrt(-1))
+end.
+------------------------------------------------------------
+------------------------------------------------------------
+------------------------------------------------------------
+[   3.142]
+[ -2.500000E-07]
+[1.2345E+03]
+ 12.50 0
+ -1250.0 0
+ 7.0 0
+ 0.030 0
+3 1 4 5
+  1.000000E-01 TRUE
+Random 10 TRUE
+Big 1.7E+38 Small 3.0E-39
+
+Run-time error 03, PC=003022
+Program aborted

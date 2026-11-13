@@ -442,6 +442,9 @@ bool Generator::GenerateCompare(const ExpressionModel& expr, int index, const st
     const ExpressionNode& right = expr.nodes[node.right];
     if (Validator::IsSetType(left.type) || Validator::IsSetType(right.type))
         return GenerateSetCompare(expr, index, label, jumpiftrue);
+    if (Validator::IsRealType(left.type) || Validator::IsRealType(right.type) ||
+        left.convert == ConvertIntToReal || right.convert == ConvertIntToReal)
+        return GenerateRealCompare(expr, index, label, jumpiftrue);
     if (Validator::IsStringType(left.type) || Validator::IsStringType(right.type) ||
         left.convert == ConvertArrayToString || left.convert == ConvertCharToString ||
         right.convert == ConvertArrayToString || right.convert == ConvertCharToString)
@@ -629,10 +632,13 @@ bool Generator::GenerateUserCall(const ExpressionModel& expr, int index)
     const SymbolModel& symbol = g_program.symbols[node.symbol];
     const ProcedureModel& proc = g_program.procedures[symbol.procindex];
     bool stringresult = proc.kind == ProcKindFunction && Validator::IsStringType(proc.resulttypeindex);
-    if (proc.kind == ProcKindFunction && !stringresult && !Validator::IsScalar(proc.resulttypeindex))
-        return false;  // Real results: step 7
+    bool realresult = proc.kind == ProcKindFunction && Validator::IsRealType(proc.resulttypeindex);
+    if (proc.kind == ProcKindFunction && !stringresult && !realresult && !Validator::IsScalar(proc.resulttypeindex))
+        return false;
+    if (realresult)
+        Emit("CMP", Operand::AutoDec(6), Operand::AutoDec(6), "place for the Real result");
 
-    std::vector<bool> isvar, isstring, isset;
+    std::vector<bool> isvar, isstring, isset, isreal;
     for (const ParamGroupModel& group : proc.params)
     {
         for (size_t i = 0; i < group.names.size(); i++)
@@ -641,6 +647,7 @@ bool Generator::GenerateUserCall(const ExpressionModel& expr, int index)
             isvar.push_back(group.isvar);
             isstring.push_back(byvalue && Validator::IsStringType(group.paramtype));
             isset.push_back(byvalue && Validator::IsSetType(group.paramtype));
+            isreal.push_back(byvalue && Validator::IsRealType(group.paramtype));
         }
     }
     if (isvar.size() != node.args.size())
@@ -694,6 +701,12 @@ bool Generator::GenerateUserCall(const ExpressionModel& expr, int index)
         }
         else if (isset[i])
             Emit("MOV", Operand::ImmLabel(GetDataLabel(expr.nodes[arg].constvalue.svalue)), Operand::AutoDec(6), "set constant");
+        else if (isreal[i])
+        {
+            if (!GenerateReal(expr, arg))
+                return false;
+            pushed += 2;  // 4 bytes in all
+        }
         else if (isstring[i] && expr.nodes[arg].isconst)
         {
             const ExpressionNode& argnode = expr.nodes[arg];

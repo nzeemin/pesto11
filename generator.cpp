@@ -22,7 +22,8 @@ static string MakeLabel(char prefix, int number)
 
 Generator::Generator(FinalModel* final, const RuntimeGenerator* runtime) :
     m_final(final), m_runtime(runtime), m_code(nullptr), m_procindex(0),
-    m_labelcount(0), m_gotocount(0), m_stringcount(0), m_lastfile(-1), m_lastline(0), m_setrangetype(-1)
+    m_labelcount(0), m_gotocount(0), m_stringcount(0), m_lastfile(-1), m_lastline(0), m_setrangetype(-1),
+    m_usesreal(false), m_initend(0)
 {
     assert(final != nullptr);
     assert(runtime != nullptr);
@@ -186,6 +187,32 @@ void Generator::GenerateProgram()
         if (proc.directive == ProcDirNone)
             GenerateProcedure(i);
     }
+
+    // Real code needs the FIS trap handler: set after INIT, removed after HALT (DESIGN 7.2).
+    // No branch crosses these places, so the branch layout stays valid.
+    if (m_usesreal)
+    {
+        std::vector<CodeLine>& lines = m_final->procedures[0].lines;
+        CodeLine call;
+        call.kind = LineInstruction;
+        call.opcode = "CALL";
+        call.words = 2;
+        for (size_t i = 0; i < lines.size(); i++)
+        {
+            if (lines[i].kind == LineRaw && lines[i].text.compare(0, 6, "HALT::") == 0)
+            {
+                call.src = Operand::Label("FISOFF");
+                call.comment = "restore the FIS trap vector";
+                lines.insert(lines.begin() + i + 1, call);
+                break;
+            }
+        }
+        call.src = Operand::Label("FISON");
+        call.comment = "FIS trap handler: errors 01, 02";
+        lines.insert(lines.begin() + m_initend, call);
+        m_final->runtimeneeds.insert("FISON");
+        m_final->runtimeneeds.insert("FISOFF");
+    }
     GenerateData();
 }
 
@@ -203,6 +230,7 @@ void Generator::GenerateProcedure(int procindex)
             EmitSourceLine(g_program.name.pos);
         EmitLabel("START:");
         EmitTemplateBlock("INIT");
+        m_initend = m_code->lines.size();
         GenerateStatement(proc.block.body);
         EmitTemplateBlock("TERM");
         LayoutBranches(*m_code);
@@ -216,7 +244,8 @@ void Generator::GenerateProcedure(int procindex)
     {
         if (!group.isvar && group.paramtype >= 0 && !Validator::IsScalar(group.paramtype) &&
             !Validator::IsArrayType(group.paramtype) && !Validator::IsRecordType(group.paramtype) &&
-            !Validator::IsStringType(group.paramtype) && !Validator::IsSetType(group.paramtype))
+            !Validator::IsStringType(group.paramtype) && !Validator::IsSetType(group.paramtype) &&
+            !Validator::IsRealType(group.paramtype))
             EmitTodo("value parameter of type " + g_program.TypeToString(group.paramtype));
     }
 
@@ -290,8 +319,8 @@ void Generator::GenerateProcedure(int procindex)
     if (proc.kind == ProcKindFunction && proc.resultsymbol >= 0)
     {
         const SymbolModel& result = g_program.symbols[proc.resultsymbol];
-        if (Validator::IsStringType(result.type))
-            ;  // Written by the function into the caller's buffer
+        if (Validator::IsStringType(result.type) || Validator::IsRealType(result.type))
+            ;  // Written by the function into the place reserved by the caller
         else if (!Validator::IsScalar(result.type))
             EmitTodo("function result of type " + g_program.TypeToString(result.type));
         else if (Validator::TypeSize(result.type) == 1)
@@ -528,6 +557,18 @@ static bool FillConstImage(std::vector<unsigned char>& image, int offset, int ty
         image[offset] = (unsigned char)(v & 0xFF);
         if (size > 1)
             image[offset + 1] = (unsigned char)((v >> 8) & 0xFF);
+        return true;
+    }
+    if (model.kind == TypeKindReal)
+    {
+        double v = Validator::IsRealType(node.type) ? node.constvalue.dvalue : (double)node.constvalue.ivalue;
+        uint16_t high, low;
+        if (!RealToDecF(v, high, low))
+            return false;
+        image[offset] = (unsigned char)(high & 0xFF);
+        image[offset + 1] = (unsigned char)(high >> 8);
+        image[offset + 2] = (unsigned char)(low & 0xFF);
+        image[offset + 3] = (unsigned char)(low >> 8);
         return true;
     }
     if (model.kind == TypeKindSet)
