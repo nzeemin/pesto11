@@ -1,0 +1,142 @@
+-q
+------------------------------------------------------------
+type Str20 = string[20];
+var S, T: Str20; C: Char; I: Integer;
+function F(X: Str20; K: Integer): Str20;
+begin
+  F := Copy(X, K, 3)
+end;
+begin
+  S := T;
+  S := S + C;
+  T := F(S + T, I) + 'z';
+  I := Length(S) + Pos('a', T);
+  if S = T then C := S[1];
+  Write(S + T)
+end.
+------------------------------------------------------------
+------------------------------------------------------------
+	.TITLE	TEST
+	.GLOBL	COPY, POS, STCAT, STCATC, STCMP, STCP, WRSTR
+START::
+	MTPS	#340
+	CLR	@#177560
+	MTPS	#0
+	MOV	SP, INIT$S
+	MOV	#-2, R0
+	EMT	354
+	BIC	#1, R0
+	MOV	R0, SP
+	MOV	#V00002, R0
+	MOV	#V00001, R1
+	MOV	#20., R2
+	CALL	STCP
+	SUB	#256., SP
+	MOV	#V00001, R0
+	MOV	SP, R1
+	MOV	#255., R2
+	CALL	STCP
+	CLR	R0
+	BISB	V00003, R0
+	MOV	R0, R1
+	MOV	SP, R0
+	CALL	STCATC
+	MOV	SP, R0
+	MOV	#V00001, R1
+	MOV	#20., R2
+	CALL	STCP
+	ADD	#256., SP
+	SUB	#256., SP
+	SUB	#256., SP
+	MOV	#V00001, R0
+	MOV	SP, R1
+	MOV	#255., R2
+	CALL	STCP
+	MOV	#V00002, R1
+	MOV	SP, R0
+	CALL	STCAT
+	MOV	SP, R0
+	ADD	#256., R0
+	MOV	R0, -(SP)
+	MOV	SP, R0
+	ADD	#2., R0
+	MOV	R0, -(SP)
+	MOV	V00004, -(SP)
+	CALL	P00001
+	ADD	#256., SP
+	MOV	#122., R1
+	MOV	SP, R0
+	CALL	STCATC
+	MOV	SP, R0
+	MOV	#V00002, R1
+	MOV	#20., R2
+	CALL	STCP
+	ADD	#256., SP
+	CLR	R0
+	BISB	V00001, R0
+	MOV	R0, -(SP)
+	MOV	#K00001, R0
+	MOV	#V00002, R1
+	CALL	POS
+	MOV	R0, R2
+	MOV	(SP)+, R0
+	ADD	R2, R0
+	MOV	R0, V00004
+	MOV	#V00001, R0
+	MOV	#V00002, R1
+	CALL	STCMP
+	BNE	L00001
+	MOVB	V00001+1., V00003
+L00001:
+	SUB	#256., SP
+	MOV	#V00001, R0
+	MOV	SP, R1
+	MOV	#255., R2
+	CALL	STCP
+	MOV	#V00002, R1
+	MOV	SP, R0
+	CALL	STCAT
+	MOV	SP, R0
+	CALL	WRSTR
+	ADD	#256., SP
+HALT::
+INIT$S = . + 2
+	MOV	#776, SP
+	EMT	350
+P00001:
+	MOV	R5, -(SP)
+	MOV	SP, R5
+	SUB	#22., SP
+	MOV	6.(R5), R0
+	MOV	R5, R1
+	SUB	#22., R1
+	MOV	#20., R2
+	CALL	STCP
+	SUB	#256., SP
+	MOV	R5, R0
+	ADD	#-22., R0
+	MOV	SP, R1
+	MOV	#255., R2
+	CALL	STCP
+	MOV	4.(R5), R1
+	MOV	#3., R2
+	MOV	SP, R0
+	CALL	COPY
+	MOV	SP, R0
+	MOV	8.(R5), R1
+	MOV	#20., R2
+	CALL	STCP
+	ADD	#256., SP
+L00002:
+	MOV	R5, SP
+	MOV	(SP)+, R5
+	MOV	(SP), 6.(SP)
+	ADD	#6., SP
+	RETURN
+K00001:	.BYTE	1., 97.
+	.EVEN
+V00001:	.BLKW	11.
+V00002:	.BLKW	11.
+V00003:	.BLKW	1.
+V00004:	.BLKW	1.
+	.END	START

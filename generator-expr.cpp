@@ -122,12 +122,12 @@ bool Generator::HasSideEffects(const ExpressionModel& expr, int index) const
 // Values
 
 // Ordinal value into R0. Returns false if the expression is not supported yet.
-bool Generator::GenerateValue(const ExpressionModel& expr, int index)
+bool Generator::GenerateValue(const ExpressionModel& expr, int index, bool ignoreconvert)
 {
     if (index < 0)
         return false;
     const ExpressionNode& node = expr.nodes[index];
-    if (node.convert != ConvertNone || !Validator::IsScalar(node.type))
+    if ((node.convert != ConvertNone && !ignoreconvert) || !Validator::IsScalar(node.type))
         return false;  // Real, strings, sets: later steps
 
     Operand operand;
@@ -410,7 +410,7 @@ bool Generator::GenerateCondition(const ExpressionModel& expr, int index, const 
 }
 
 // Branch opcodes for a comparison: [relation][signed/unsigned][jump if true/false]
-static const char* GetCompareBranch(const Token& op, bool isunsigned, bool jumpiftrue)
+const char* GetCompareBranch(const Token& op, bool isunsigned, bool jumpiftrue)
 {
     struct { SymbolIndex symbol; const char* signedtrue; const char* signedfalse; const char* unsignedtrue; const char* unsignedfalse; }
     table[] =
@@ -440,6 +440,10 @@ bool Generator::GenerateCompare(const ExpressionModel& expr, int index, const st
     const ExpressionNode& node = expr.nodes[index];
     const ExpressionNode& left = expr.nodes[node.left];
     const ExpressionNode& right = expr.nodes[node.right];
+    if (Validator::IsStringType(left.type) || Validator::IsStringType(right.type) ||
+        left.convert == ConvertArrayToString || left.convert == ConvertCharToString ||
+        right.convert == ConvertArrayToString || right.convert == ConvertCharToString)
+        return GenerateStringCompare(expr, index, label, jumpiftrue);
     if (!Validator::IsScalar(left.type) || !Validator::IsScalar(right.type) ||
         left.convert != ConvertNone || right.convert != ConvertNone)
         return false;  // Real, strings, sets: later steps
@@ -622,21 +626,71 @@ bool Generator::GenerateUserCall(const ExpressionModel& expr, int index)
     const ExpressionNode& node = expr.nodes[index];
     const SymbolModel& symbol = g_program.symbols[node.symbol];
     const ProcedureModel& proc = g_program.procedures[symbol.procindex];
-    if (proc.kind == ProcKindFunction && !Validator::IsScalar(proc.resulttypeindex))
-        return false;  // String and Real results: steps 5 and 7
+    bool stringresult = proc.kind == ProcKindFunction && Validator::IsStringType(proc.resulttypeindex);
+    if (proc.kind == ProcKindFunction && !stringresult && !Validator::IsScalar(proc.resulttypeindex))
+        return false;  // Real results: step 7
 
-    std::vector<bool> isvar;
+    std::vector<bool> isvar, isstring;
     for (const ParamGroupModel& group : proc.params)
     {
         for (size_t i = 0; i < group.names.size(); i++)
+        {
             isvar.push_back(group.isvar);
+            isstring.push_back(!group.isvar && group.paramtype >= 0 && Validator::IsStringType(group.paramtype));
+        }
     }
     if (isvar.size() != node.args.size())
         return false;
+
+    // A string result goes into a buffer reserved by the caller; string expressions passed by value
+    // are built in buffers before any parameter is pushed (DESIGN 7.6)
+    if (stringresult)
+        Emit("SUB", Operand::Imm(256), Operand::Reg(6), "buffer for the function result");
+    std::vector<int> buffer(node.args.size(), -1);
+    int buffers = 0;
     for (size_t i = 0; i < node.args.size(); i++)
     {
-        if (!PushArgument(expr, node.args[i].node, isvar[i]))
+        if (isstring[i] && !IsSimpleString(expr, node.args[i].node))
+        {
+            if (!GenerateStringBuffer(expr, node.args[i].node))
+                return false;
+            buffer[i] = buffers++;
+        }
+    }
+    int pushed = 0;
+    if (stringresult)
+    {
+        Emit("MOV", Operand::Reg(6), Operand::Reg(0));
+        if (buffers > 0)
+            Emit("ADD", Operand::Imm(buffers * 256), Operand::Reg(0));
+        Emit("MOV", Operand::Reg(0), Operand::AutoDec(6), "result address");
+        pushed += 2;
+    }
+    for (size_t i = 0; i < node.args.size(); i++)
+    {
+        int arg = node.args[i].node;
+        if (buffer[i] >= 0)
+        {
+            Emit("MOV", Operand::Reg(6), Operand::Reg(0));
+            Emit("ADD", Operand::Imm(pushed + (buffers - 1 - buffer[i]) * 256), Operand::Reg(0));
+            Emit("MOV", Operand::Reg(0), Operand::AutoDec(6), "string buffer");
+        }
+        else if (isstring[i] && expr.nodes[arg].isconst)
+        {
+            const ExpressionNode& argnode = expr.nodes[arg];
+            string bytes = Validator::IsCharType(argnode.type) ? string(1, (char)argnode.constvalue.ivalue) : argnode.constvalue.svalue;
+            Emit("MOV", Operand::ImmLabel(GetStringLabel(bytes)), Operand::AutoDec(6));
+        }
+        else if (isstring[i])
+        {
+            Operand operand;
+            if (!GenerateDesignator(expr, arg, 3, operand))
+                return false;
+            PushAddress(operand, expr.nodes[arg].token.text);
+        }
+        else if (!PushArgument(expr, arg, isvar[i]))
             return false;
+        pushed += 2;
     }
 
     // Static link for a nested procedure: the frame of its enclosing procedure
@@ -660,6 +714,7 @@ bool Generator::GenerateUserCall(const ExpressionModel& expr, int index)
     }
     else
         Emit("CALL", Operand::Label(proc.asmlabel), Operand(), proc.name.text);
+    FreeBuffers(buffers);  // The result buffer stays on the stack
     return true;
 }
 

@@ -37,10 +37,10 @@ bool Generator::GenerateWriteItem(const ExpressionModel& expr, const ArgModel& a
     const ExpressionNode& node = expr.nodes[arg.node];
     int type = node.type;
     bool haswidth = (arg.width >= 0);
-    if (node.convert != ConvertNone)
-        return false;  // Array of Char as a string: not supported yet
+    if (node.convert != ConvertNone && node.convert != ConvertArrayToString)
+        return false;
 
-    if (Validator::IsStringType(type))
+    if (Validator::IsStringType(type) || node.convert == ConvertArrayToString)
     {
         if (node.isconst)
         {
@@ -57,9 +57,15 @@ bool Generator::GenerateWriteItem(const ExpressionModel& expr, const ArgModel& a
             EmitCall("WRSTRW");
             return true;
         }
-        if (!IsDesignator(expr, arg.node) || !LoadWithWidth(expr, arg, true))
-            return false;  // String expressions: step 5
+        std::vector<RuntimeArg> args;
+        args.push_back(RuntimeArg(RuntimeArg::StringValue, arg.node, 0));
+        if (haswidth)
+            args.push_back(RuntimeArg(RuntimeArg::Value, arg.width, 1));
+        int buffers;
+        if (!LoadRuntimeArgs(expr, args, buffers))
+            return false;
         EmitCall(haswidth ? "WRSTRW" : "WRSTR");
+        FreeBuffers(buffers);
         return true;
     }
 
@@ -138,6 +144,8 @@ bool Generator::GenerateStdFunction(const ExpressionModel& expr, int index)
         EmitCall(name == "MemAvail" ? "MEMAVL" : "MAXAVL", name);
         return true;
     }
+    if (name == "Length" || name == "Pos")
+        return GenerateStringFunction(name, expr, index);
     if (node.args.size() != 1)
         return false;
     int arg = node.args[0].node;
@@ -195,6 +203,8 @@ bool Generator::GenerateStdFunction(const ExpressionModel& expr, int index)
         Emit("BIC", Operand::Imm(-256), Operand::Reg(0));
     else if (name == "Swap")
         Emit("SWAB", Operand::Reg(0));
+    else if (name == "UpCase")
+        EmitCall("UPCAS");
     else
         return false;
     return true;
@@ -265,6 +275,8 @@ bool Generator::GenerateStdProcedure(const string& name, const ExpressionModel& 
         EmitCall("DISPOS");
         return true;
     }
+    if (name == "Insert" || name == "Delete" || name == "Str" || name == "Val")
+        return GenerateStringProcedure(name, expr, index);
     if (name == "Release" && args.size() == 1)
     {
         if (!LoadOrdinal(expr, args[0].node, 0))

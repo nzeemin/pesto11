@@ -1,0 +1,82 @@
+-q
+------------------------------------------------------------
+program Step5;
+type
+  Name = string[10];
+  Str255 = string[255];
+  Rec = record N: Name; Age: Integer end;
+var
+  S, T: string[20];
+  Short: string[5];
+  N: Name;
+  C: Char;
+  I, Code: Integer;
+  A: array[1..4] of Char;
+  R: Rec;
+  L: array[1..3] of Name;
+
+function Greet(Who: Name): Str255;
+begin
+  Greet := 'Hi, ' + Who + '!'
+end;
+
+function Twice(X: Str255): Str255;
+begin
+  Twice := X + X
+end;
+
+procedure Shout(var X: Name);
+var I: Integer;
+begin
+  for I := 1 to Length(X) do X[I] := UpCase(X[I])
+end;
+
+function CountChar(St: Str255; Ch: Char): Integer;
+var I, K: Integer;
+begin
+  K := 0;
+  for I := 1 to Length(St) do if St[I] = Ch then K := K + 1;
+  CountChar := K
+end;
+
+begin
+  S := 'Hello';
+  T := S + ', ' + 'world';
+  WriteLn(T, ' len=', Length(T));
+  Short := T;
+  WriteLn('Short=', Short, ' len=', Length(Short));
+  C := 'x';
+  S := C;
+  S := S + C + 'y' + C;
+  WriteLn('S=', S, ' ', Length(S + S));
+  WriteLn('Copy=', Copy(T, 8, 5), ' [', Copy(T, 30, 2), '] ', Copy(T, 10, 100));
+  WriteLn('Pos=', Pos('wor', T), ' ', Pos('z', T), ' ', Pos(C, 'abcx'));
+  WriteLn('Concat=', Concat(S, '-', Short, '-', C));
+  N := 'pesto';
+  Shout(N);
+  WriteLn('Shout=', N, ' ', Greet(N), ' ', Greet('Bob'));
+  WriteLn('Twice=', Twice(Twice('ab')), ' ', Length(Twice(T)));
+  WriteLn('Count=', CountChar(T, 'o'), ' ', CountChar('banana' + 'na', 'a'));
+  if S < T then Write('lt ') else Write('ge ');
+  if 'abc' < 'abd' then Write('1');
+  if 'ab' < 'abc' then Write('2');
+  if 'b' > 'abc' then Write('3');
+  if S = 'xxyx' then Write('4');
+  if C = 'x' then Write('5');
+  if Copy(T, 1, 5) = 'Hello' then Write('6');
+  if T <> S then Write('7');
+  WriteLn;
+end.
+------------------------------------------------------------
+------------------------------------------------------------
+------------------------------------------------------------
+Hello, world len=12
+Short=Hello len=5
+S=xxyx 8
+Copy=world [] rld
+Pos=8 0 4
+Concat=xxyx-Hello-x
+Shout=PESTO Hi, PESTO! Hi, Bob!
+Twice=abababab 24
+Count=2 4
+ge 1234567

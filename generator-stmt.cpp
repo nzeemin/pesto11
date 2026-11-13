@@ -139,6 +139,10 @@ bool Generator::GenerateAssign(StatementModel& statement)
     const ExpressionNode& targetnode = target.nodes[target.root];
     const ExpressionNode& valuenode = value.nodes[value.root];
     int type = targetnode.type;
+    if (Validator::IsStringType(type) ||
+        (Validator::IsCharType(type) && Validator::IsStringType(valuenode.type) && valuenode.convert == ConvertNone) ||
+        (Validator::IsCharArray(type) && valuenode.isconst && !Validator::IsCharArray(valuenode.type)))
+        return GenerateStringAssign(statement);
     if (Validator::IsArrayType(type) || Validator::IsRecordType(type))
         return GenerateStructAssign(statement);
     if (!Validator::IsScalar(type))

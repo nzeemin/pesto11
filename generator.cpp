@@ -202,7 +202,8 @@ void Generator::GenerateProcedure(int procindex)
     for (const ParamGroupModel& group : proc.params)
     {
         if (!group.isvar && group.paramtype >= 0 && !Validator::IsScalar(group.paramtype) &&
-            !Validator::IsArrayType(group.paramtype) && !Validator::IsRecordType(group.paramtype))
+            !Validator::IsArrayType(group.paramtype) && !Validator::IsRecordType(group.paramtype) &&
+            !Validator::IsStringType(group.paramtype))
             EmitTodo("value parameter of type " + g_program.TypeToString(group.paramtype));
     }
 
@@ -238,8 +239,18 @@ void Generator::GenerateProcedure(int procindex)
     {
         if (symbol.kind != SymParam || symbol.scope != proc.scope || symbol.paramoffset == 0)
             continue;
+        if (Validator::IsStringType(symbol.type))
+        {
+            Emit("MOV", Operand::Index(5, symbol.paramoffset), Operand::Reg(0), "copy of " + symbol.name);
+            Emit("MOV", Operand::Reg(5), Operand::Reg(1));
+            Emit("SUB", Operand::Imm(-symbol.location.offset), Operand::Reg(1));
+            int64_t maxlength = Validator::GetType(symbol.type).high;
+            Emit("MOV", Operand::Imm(maxlength > 0 && maxlength <= 255 ? maxlength : 255), Operand::Reg(2));
+            EmitCall("STCP");
+            continue;
+        }
         if (!Validator::IsArrayType(symbol.type) && !Validator::IsRecordType(symbol.type))
-            continue;  // Strings and sets: steps 5 and 6
+            continue;  // Sets: step 6
         Emit("MOV", Operand::Index(5, symbol.paramoffset), Operand::Reg(3), "copy of " + symbol.name);
         Emit("MOV", Operand::Reg(5), Operand::Reg(4));
         Emit("SUB", Operand::Imm(-symbol.location.offset), Operand::Reg(4));
@@ -254,7 +265,9 @@ void Generator::GenerateProcedure(int procindex)
     if (proc.kind == ProcKindFunction && proc.resultsymbol >= 0)
     {
         const SymbolModel& result = g_program.symbols[proc.resultsymbol];
-        if (!Validator::IsScalar(result.type))
+        if (Validator::IsStringType(result.type))
+            ;  // Written by the function into the caller's buffer
+        else if (!Validator::IsScalar(result.type))
             EmitTodo("function result of type " + g_program.TypeToString(result.type));
         else if (Validator::TypeSize(result.type) == 1)
         {

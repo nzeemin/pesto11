@@ -962,6 +962,20 @@ public:
 //////////////////////////////////////////////////////////////////////
 // Generator, see generator*.cpp and docs/DESIGN.md section 4.11
 
+// Argument of a runtime call, loaded into a register by Generator::LoadRuntimeArgs
+struct RuntimeArg
+{
+    enum Kind { StringValue, Address, Value, Immediate };
+    Kind    kind;
+    int     node;           // Expression node; for Value of a width -1 means "no width" (-1 loaded)
+    int     reg;
+    int64_t imm;            // Immediate
+    int     buffer;         // StringValue in a temporary buffer: its number, -1 if none
+    const ExpressionModel* model;  // Expression of the node, if not the one given to LoadRuntimeArgs
+public:
+    RuntimeArg(Kind k, int n, int r, int64_t i = 0) : kind(k), node(n), reg(r), imm(i), buffer(-1), model(nullptr) {}
+};
+
 class Generator
 {
     FinalModel* m_final;
@@ -1029,7 +1043,7 @@ private:
     bool GenerateUserCall(const ExpressionModel& expr, int index);
     bool PushArgument(const ExpressionModel& expr, int argnode, bool isvar);
     bool LoadOrdinal(const ExpressionModel& expr, int index, int reg);
-    bool GenerateValue(const ExpressionModel& expr, int index);
+    bool GenerateValue(const ExpressionModel& expr, int index, bool ignoreconvert = false);
     bool GetSimpleOperand(const ExpressionModel& expr, int index, Operand& operand, bool& isbyte);
     bool GetRightOperand(const ExpressionModel& expr, int index, Operand& operand);
     bool GenerateUnaryValue(const ExpressionModel& expr, int index);
@@ -1045,8 +1059,22 @@ private:
     bool GenerateWriteItem(const ExpressionModel& expr, const ArgModel& arg);
     bool GenerateStdFunction(const ExpressionModel& expr, int index);
     bool GenerateStdProcedure(const string& name, const ExpressionModel& expr, int index);
+    // Strings, generator-str.cpp
+    bool IsSimpleString(const ExpressionModel& expr, int index);
+    bool LoadStringAddress(const ExpressionModel& expr, int index, int reg);
+    bool GenerateStringBuffer(const ExpressionModel& expr, int index);
+    bool AppendString(const ExpressionModel& expr, int index);
+    bool LoadRuntimeArgs(const ExpressionModel& expr, std::vector<RuntimeArg>& args, int& buffers);
+    void FreeBuffers(int buffers);
+    bool GenerateStringAssign(StatementModel& statement);
+    bool GenerateStringCompare(const ExpressionModel& expr, int index, const string& label, bool jumpiftrue);
+    bool GenerateStringFunction(const string& name, const ExpressionModel& expr, int index);
+    bool GenerateStringProcedure(const string& name, const ExpressionModel& expr, int index);
     bool LoadWithWidth(const ExpressionModel& expr, const ArgModel& arg, bool isaddress);
 };
+
+// Branch opcode for a comparison operation, see generator-expr.cpp
+const char* GetCompareBranch(const Token& op, bool isunsigned, bool jumpiftrue);
 
 // Branch layout: replace short branches that cannot reach their target, see branches.cpp
 void LayoutBranches(ProcedureCode& code);
