@@ -973,6 +973,7 @@ class Generator
     std::vector<std::pair<string, string>> m_stringlist;  // K label and bytes, in creation order
     int     m_stringcount;
     int     m_lastfile, m_lastline;         // Last source line put into a comment
+    string  m_exitlabel;                    // Epilogue of the procedure being generated, for Exit
 public:
     Generator(FinalModel* final, const RuntimeGenerator* runtime);
 public:
@@ -1008,6 +1009,10 @@ private:
     // Expressions, generator-expr.cpp
     bool GetVariableOperand(const ExpressionModel& expr, int index, Operand& operand);
     bool GetVariableAddress(const ExpressionModel& expr, int index, Operand& operand);
+    bool PrepareVariableOperand(const ExpressionModel& expr, int index, int reg, Operand& operand);
+    void EmitStaticChain(int level, int reg);
+    bool GenerateUserCall(const ExpressionModel& expr, int index);
+    bool PushArgument(const ExpressionModel& expr, int argnode, bool isvar);
     bool LoadOrdinal(const ExpressionModel& expr, int index, int reg);
     bool GenerateValue(const ExpressionModel& expr, int index);
     bool GetSimpleOperand(const ExpressionModel& expr, int index, Operand& operand, bool& isbyte);

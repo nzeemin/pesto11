@@ -1,0 +1,104 @@
+-q
+----------------------------------------------------------------------
+program Step3;
+var G, H: Integer; Ch: Char;
+
+function Fact(N: Integer): Integer;
+begin
+  if N <= 1 then Fact := 1 else Fact := N * Fact(N - 1)
+end;
+
+function Fib(N: Integer): Integer;
+begin
+  if N < 2 then Fib := N else Fib := Fib(N - 1) + Fib(N - 2)
+end;
+
+procedure Swap(var A, B: Integer);
+var T: Integer;
+begin
+  T := A; A := B; B := T
+end;
+
+procedure Outer(X: Integer);
+var L: Integer; C: Char;
+  procedure Inner(Y: Integer);
+  var M: Integer;
+    procedure Deepest;
+    begin
+      L := L + 100;  { two levels up }
+      M := M + 1;    { one level up }
+      Write(' deep L=', L, ' M=', M)
+    end;
+  begin
+    M := Y;
+    Deepest;
+    L := L + Y;
+    C := Succ(C)
+  end;
+begin
+  L := X; C := 'a';
+  Inner(5);
+  Inner(7);
+  WriteLn(' outer L=', L, ' C=', C)
+end;
+
+function Sign(V: Integer): Integer;
+  procedure SetResult(R: Integer);
+  begin
+    Sign := R
+  end;
+begin
+  if V < 0 then SetResult(-1) else if V = 0 then SetResult(0) else SetResult(1)
+end;
+
+procedure Count(N: Integer);
+var I: Integer;
+begin
+  for I := 1 to N do
+  begin
+    if I > 3 then Exit;
+    Write(I)
+  end
+end;
+
+function IsOdd(N: Integer): Boolean; forward;
+function IsEven(N: Integer): Boolean;
+begin
+  if N = 0 then IsEven := True else IsEven := IsOdd(N - 1)
+end;
+function IsOdd;
+begin
+  if N = 0 then IsOdd := False else IsOdd := IsEven(N - 1)
+end;
+
+procedure Inc2(var V: Integer; var C: Char);
+begin
+  V := V + 2; C := Succ(C)
+end;
+
+procedure Twice(var V: Integer);
+begin
+  Inc2(V, Ch); Inc2(V, Ch)
+end;
+
+begin
+  WriteLn('Fact(7)=', Fact(7), ' Fib(10)=', Fib(10));
+  G := 1; H := 2; Swap(G, H); WriteLn('G=', G, ' H=', H);
+  Outer(10);
+  WriteLn(Sign(-5), ' ', Sign(0), ' ', Sign(9));
+  Count(10); WriteLn;
+  WriteLn(IsEven(10), ' ', IsOdd(7), ' ', IsEven(3));
+  Ch := 'A'; G := 0; Twice(G); WriteLn('G=', G, ' Ch=', Ch);
+  if Fact(3) + Fib(5) = 11 then WriteLn('calls in expressions OK')
+end.
+----------------------------------------------------------------------
+----------------------------------------------------------------------
+----------------------------------------------------------------------
+Fact(7)=5040 Fib(10)=55
+G=2 H=1
+ deep L=110 M=6 deep L=215 M=8 outer L=222 C=c
+-1 0 1
+123
+TRUE TRUE FALSE
+G=4 Ch=C
+calls in expressions OK

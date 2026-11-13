@@ -107,7 +107,18 @@ void Generator::GenerateCallStatement(StatementModel& statement)
             Emit("JMP", Operand::Label("HALT"), Operand(), name);  // Exit in the main program ends it
             return;
         }
+        if (strcmp(name, "Exit") == 0)
+        {
+            EmitBranch("BR", m_exitlabel, "Exit");
+            return;
+        }
         EmitTodo(string("standard procedure ") + name);
+        return;
+    }
+    if (symbol.kind == SymProcedure)
+    {
+        if (!GenerateUserCall(expr, expr.root))
+            EmitTodo("call " + symbol.name);
         return;
     }
     EmitTodo("call " + symbol.name);
@@ -126,21 +137,21 @@ bool Generator::GenerateAssign(StatementModel& statement)
     if (!Validator::IsOrdinal(type))
         return false;  // Real, strings, sets, structures: later steps
 
-    Operand dest;
-    if (!GetVariableOperand(target, target.root, dest))
-        return false;  // Arrays, records, pointers, function results: later steps
     bool isbyte = (Validator::TypeSize(type) == 1);
     bool checked = (targetnode.token.directives & DirectiveR) != 0 &&
         (Validator::GetType(type).kind == TypeKindSubrange || Validator::GetType(type).kind == TypeKindEnum ||
          Validator::GetType(type).kind == TypeKindByte);
 
-    // Constant or a variable of the same size: one instruction without R0
+    // Constant or a variable of the same size: one instruction without R0.
+    // The target may need its address in R3 first (a variable of an enclosing procedure).
     if (!checked)
     {
-        Operand src;
+        Operand src, dest;
         bool srcbyte;
         if (valuenode.isconst && GetSimpleOperand(value, value.root, src, srcbyte))
         {
+            if (!PrepareVariableOperand(target, target.root, 3, dest))
+                return false;  // Arrays, records, pointers: step 4
             int64_t v = src.value;
             if (isbyte)
                 v &= 0xFF;
@@ -152,6 +163,8 @@ bool Generator::GenerateAssign(StatementModel& statement)
         }
         if (GetSimpleOperand(value, value.root, src, srcbyte) && srcbyte == isbyte)
         {
+            if (!PrepareVariableOperand(target, target.root, 3, dest))
+                return false;
             Emit(isbyte ? "MOVB" : "MOV", src, dest, targetnode.token.text);
             return true;
         }

@@ -198,7 +198,76 @@ void Generator::GenerateProcedure(int procindex)
 
     EmitSourceLine(proc.name.pos);
     EmitLabel(proc.asmlabel);
-    EmitTodo("procedure " + proc.name.text);  //TODO: step 3 of the generator
+
+    // Value parameters of strings, arrays, records and sets are copied into the frame: steps 4-6
+    for (const ParamGroupModel& group : proc.params)
+    {
+        if (!group.isvar && group.paramtype >= 0 && !Validator::IsOrdinal(group.paramtype))
+            EmitTodo("value parameter of type " + g_program.TypeToString(group.paramtype));
+    }
+
+    // The frame is needed for parameters, locals, the static link, or for nested procedures
+    bool haschildren = false;
+    for (const ProcedureModel& other : g_program.procedures)
+    {
+        if (other.parent == procindex)
+            haschildren = true;
+    }
+    bool needframe = proc.paramsize > 0 || proc.localsize > 0 || proc.nested || haschildren;
+
+    if (needframe)
+    {
+        Emit("MOV", Operand::Reg(5), Operand::AutoDec(6), "save the caller frame");
+        Emit("MOV", Operand::Reg(6), Operand::Reg(5), "new frame");
+        int locals = proc.localsize;
+        if (proc.nested)
+        {
+            Emit("MOV", Operand::Reg(4), Operand::AutoDec(6), "static link -> -2(R5)");
+            locals -= 2;
+        }
+        if (locals == 2)
+            Emit("TST", Operand::AutoDec(6), Operand(), "locals");
+        else if (locals == 4)
+            Emit("CMP", Operand::AutoDec(6), Operand::AutoDec(6), "locals");
+        else if (locals > 0)
+            Emit("SUB", Operand::Imm(locals), Operand::Reg(6), "locals");
+    }
+
+    m_exitlabel = NewLabel();
+    GenerateStatement(proc.block.body);
+    EmitLabel(m_exitlabel);
+
+    // Function result into R0
+    if (proc.kind == ProcKindFunction && proc.resultsymbol >= 0)
+    {
+        const SymbolModel& result = g_program.symbols[proc.resultsymbol];
+        if (!Validator::IsOrdinal(result.type))
+            EmitTodo("function result of type " + g_program.TypeToString(result.type));
+        else if (Validator::TypeSize(result.type) == 1)
+        {
+            Emit("CLR", Operand::Reg(0));
+            Emit("BISB", Operand::Index(5, result.location.offset), Operand::Reg(0), "result");
+        }
+        else
+            Emit("MOV", Operand::Index(5, result.location.offset), Operand::Reg(0), "result");
+    }
+
+    // Epilogue: restore the caller frame, pop the parameters (DESIGN 7.3)
+    if (needframe)
+    {
+        Emit("MOV", Operand::Reg(5), Operand::Reg(6));
+        Emit("MOV", Operand::AutoInc(6), Operand::Reg(5));
+    }
+    int params = proc.paramsize;
+    if (params == 2)
+        Emit("MOV", Operand::AutoInc(6), Operand::Deferred(6), "return address over the parameter");
+    else if (params > 0)
+    {
+        Emit("MOV", Operand::Deferred(6), Operand::Index(6, params), "return address over the parameters");
+        Emit("ADD", Operand::Imm(params), Operand::Reg(6));
+    }
+    Emit("RETURN");
+    LayoutBranches(*m_code);
 }
 
 

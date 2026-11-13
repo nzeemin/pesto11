@@ -11,17 +11,27 @@
 //////////////////////////////////////////////////////////////////////
 // Variables
 
-// Operand for a variable that needs no code to address: a global, a local, a parameter.
-// Returns false if the variable needs address calculation (not supported yet).
+// Variable symbol that has a location: variables, parameters, typed constants, function results
+static bool IsVariableSymbol(const SymbolModel& symbol)
+{
+    switch (symbol.kind)
+    {
+    case SymVar: case SymTypedConst: case SymParam: case SymVarParam: case SymFuncResult:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// Operand for a variable that needs no code to address: a global, a local or a parameter of the
+// current procedure (a var parameter through @n(R5)). Emits nothing; returns false otherwise.
 bool Generator::GetVariableOperand(const ExpressionModel& expr, int index, Operand& operand)
 {
     const ExpressionNode& node = expr.nodes[index];
     if (node.kind != NodeIdent || node.symbol < 0 || node.fieldoffset >= 0)
         return false;
     const SymbolModel& symbol = g_program.symbols[node.symbol];
-    if (symbol.kind != SymVar && symbol.kind != SymTypedConst && symbol.kind != SymParam)
-        return false;
-    if (symbol.absolutesym >= 0 || symbol.absoluteaddr >= 0 || symbol.indirect)
+    if (!IsVariableSymbol(symbol) || symbol.absolutesym >= 0 || symbol.absoluteaddr >= 0)
         return false;
     if (!symbol.location.asmlabel.empty())
     {
@@ -29,8 +39,38 @@ bool Generator::GetVariableOperand(const ExpressionModel& expr, int index, Opera
         return true;
     }
     if (symbol.level != g_program.procedures[m_procindex].level)
-        return false;  // Variable of an enclosing procedure: static chain, not supported yet
-    operand = Operand::Index(5, symbol.location.offset);
+        return false;  // Variable of an enclosing procedure: see PrepareVariableOperand
+    operand = symbol.indirect ? Operand::IndexDeferred(5, symbol.location.offset) : Operand::Index(5, symbol.location.offset);
+    return true;
+}
+
+// Frame of the enclosing procedure of the given level into the register, by the static chain:
+// -2(R5) is the frame of the enclosing procedure, -2 of that frame is the next one, and so on
+void Generator::EmitStaticChain(int level, int reg)
+{
+    int current = g_program.procedures[m_procindex].level;
+    assert(level < current);
+    Emit("MOV", Operand::Index(5, -2), Operand::Reg(reg), "static link");
+    for (int i = current - 1; i > level; i--)
+        Emit("MOV", Operand::Index(reg, -2), Operand::Reg(reg));
+}
+
+// Operand for a variable, emitting the address code into the register if needed:
+// a variable of an enclosing procedure is reached through the static chain
+bool Generator::PrepareVariableOperand(const ExpressionModel& expr, int index, int reg, Operand& operand)
+{
+    if (GetVariableOperand(expr, index, operand))
+        return true;
+    const ExpressionNode& node = expr.nodes[index];
+    if (node.kind != NodeIdent || node.symbol < 0 || node.fieldoffset >= 0)
+        return false;  // Fields, array elements, pointers: step 4
+    const SymbolModel& symbol = g_program.symbols[node.symbol];
+    if (!IsVariableSymbol(symbol) || symbol.absolutesym >= 0 || symbol.absoluteaddr >= 0)
+        return false;
+    if (!symbol.location.asmlabel.empty() || symbol.level >= g_program.procedures[m_procindex].level)
+        return false;
+    EmitStaticChain(symbol.level, reg);
+    operand = symbol.indirect ? Operand::IndexDeferred(reg, symbol.location.offset) : Operand::Index(reg, symbol.location.offset);
     return true;
 }
 
@@ -167,6 +207,24 @@ bool Generator::GenerateValue(const ExpressionModel& expr, int index)
     bool isbyte;
     if (GetSimpleOperand(expr, index, operand, isbyte))
         return LoadOrdinal(expr, index, 0);
+
+    if ((node.kind == NodeIdent || node.kind == NodeCall) && node.symbol >= 0)
+    {
+        const SymbolModel& symbol = g_program.symbols[node.symbol];
+        if (symbol.kind == SymFunction)
+            return GenerateUserCall(expr, index);
+        if (IsVariableSymbol(symbol) && PrepareVariableOperand(expr, index, 3, operand))
+        {
+            if (IsByteSized(node.type))
+            {
+                Emit("CLR", Operand::Reg(0));
+                Emit("BISB", operand, Operand::Reg(0), node.token.text);
+            }
+            else
+                Emit("MOV", operand, Operand::Reg(0), node.token.text);
+            return true;
+        }
+    }
 
     switch (node.kind)
     {
@@ -558,9 +616,6 @@ bool Generator::StoreOrdinal(const ExpressionModel& target, int index, const Sou
 {
     (void)pos;
     const ExpressionNode& node = target.nodes[index];
-    Operand operand;
-    if (!GetVariableOperand(target, index, operand))
-        return false;
     int type = node.type;
     if ((node.token.directives & DirectiveR) != 0)
     {
@@ -572,7 +627,115 @@ bool Generator::StoreOrdinal(const ExpressionModel& target, int index, const Sou
             EmitData(".WORD", FormatNumber(model.low) + ", " + FormatNumber(model.high), 2);
         }
     }
+    Operand operand;
+    if (!PrepareVariableOperand(target, index, 3, operand))
+        return false;
     Emit(IsByteSized(type) ? "MOVB" : "MOV", Operand::Reg(0), operand, node.token.text);
+    return true;
+}
+
+static bool IsStructuredType(int type)
+{
+    return Validator::IsStringType(type) || Validator::IsSetType(type) ||
+        Validator::IsArrayType(type) || Validator::IsRecordType(type);
+}
+
+// One argument of a user procedure call onto the stack, see DESIGN 7.3:
+// a var parameter gets the address, a value parameter the word value
+bool Generator::PushArgument(const ExpressionModel& expr, int argnode, bool isvar)
+{
+    const ExpressionNode& node = expr.nodes[argnode];
+    if (isvar)
+    {
+        Operand operand;
+        if (!PrepareVariableOperand(expr, argnode, 3, operand))
+            return false;  // Fields, array elements: step 4
+        switch (operand.mode)
+        {
+        case OpLabel:           // Global: its address
+            Emit("MOV", Operand::ImmLabel(operand.label), Operand::AutoDec(6), node.token.text);
+            return true;
+        case OpIndexDeferred:   // var parameter: pass the address it holds
+            Emit("MOV", Operand::Index(operand.reg, operand.value), Operand::AutoDec(6), node.token.text);
+            return true;
+        case OpIndex:           // Local: frame + offset
+            Emit("MOV", Operand::Reg(operand.reg), Operand::AutoDec(6), node.token.text);
+            if (operand.value != 0)
+                Emit("ADD", Operand::Imm(operand.value), Operand::Deferred(6));
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    if (IsStructuredType(node.type) || !Validator::IsOrdinal(node.type) || node.convert != ConvertNone)
+        return false;  // Strings, structures, Real: later steps
+    Operand operand;
+    bool isbyte;
+    if (GetSimpleOperand(expr, argnode, operand, isbyte))
+    {
+        if (operand.mode == OpImmediate && operand.value == 0)
+            Emit("CLR", Operand::AutoDec(6));
+        else if (isbyte)
+        {
+            Emit("CLR", Operand::AutoDec(6));
+            Emit("BISB", operand, Operand::Deferred(6), node.token.text);  // Zero-extended on the stack
+        }
+        else
+            Emit("MOV", operand, Operand::AutoDec(6), node.token.text);
+        return true;
+    }
+    if (!GenerateValue(expr, argnode))
+        return false;
+    Emit("MOV", Operand::Reg(0), Operand::AutoDec(6));
+    return true;
+}
+
+// Call of a user procedure or function: arguments left to right, static link in R4, CALL.
+// The procedure pops its parameters; an ordinal function result comes in R0.
+bool Generator::GenerateUserCall(const ExpressionModel& expr, int index)
+{
+    const ExpressionNode& node = expr.nodes[index];
+    const SymbolModel& symbol = g_program.symbols[node.symbol];
+    const ProcedureModel& proc = g_program.procedures[symbol.procindex];
+    if (proc.kind == ProcKindFunction && !Validator::IsOrdinal(proc.resulttypeindex))
+        return false;  // String and Real results: steps 5 and 7
+
+    std::vector<bool> isvar;
+    for (const ParamGroupModel& group : proc.params)
+    {
+        for (size_t i = 0; i < group.names.size(); i++)
+            isvar.push_back(group.isvar);
+    }
+    if (isvar.size() != node.args.size())
+        return false;
+    for (size_t i = 0; i < node.args.size(); i++)
+    {
+        if (!PushArgument(expr, node.args[i].node, isvar[i]))
+            return false;
+    }
+
+    // Static link for a nested procedure: the frame of its enclosing procedure
+    if (proc.level >= 2)
+    {
+        int current = g_program.procedures[m_procindex].level;
+        int enclosing = proc.level - 1;
+        if (enclosing == current)
+            Emit("MOV", Operand::Reg(5), Operand::Reg(4), "static link: this frame");
+        else
+            EmitStaticChain(enclosing, 4);
+    }
+
+    if (proc.directive == ProcDirExternal)
+    {
+        int64_t address = proc.external.IsEmpty() ? 0 : proc.external.nodes[proc.external.root].constvalue.ivalue;
+        Operand target;
+        target.mode = OpAbsolute;
+        target.value = address & 0xFFFF;
+        Emit("CALL", target, Operand(), proc.name.text);
+    }
+    else
+        Emit("CALL", Operand::Label(proc.asmlabel), Operand(), proc.name.text);
     return true;
 }
 

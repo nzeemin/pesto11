@@ -1,0 +1,28 @@
+-q
+----------------------------------------------------------------------
+procedure Beep; external $F000;
+function Status(Port: Integer): Integer; external $F002;
+var I: Integer;
+begin
+  Beep;
+  I := Status(5)
+end.
+----------------------------------------------------------------------
+----------------------------------------------------------------------
+	.TITLE	TEST
+START::
+	MTPS	#340
+	CLR	@#177560
+	MTPS	#0
+	MOV	SP, INIT$S
+	CALL	@#61440.
+	MOV	#5., -(SP)
+	CALL	@#61442.
+	MOV	R0, V00001
+HALT::
+INIT$S = . + 2
+	MOV	#776, SP
+	EMT	350
+V00001:	.BLKW	1.
+PEND::
+	.END	START
