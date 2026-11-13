@@ -121,6 +121,18 @@ void Generator::EmitTemplateBlock(const string& name)
         m_final->runtimeneeds.insert(need);
 }
 
+void Generator::EmitBranch(const string& opcode, const string& label, const string& comment)
+{
+    CodeLine line;
+    line.kind = LineBranch;
+    line.opcode = opcode;
+    line.text = label;
+    line.target = label;
+    line.comment = comment;
+    line.words = 1;
+    m_code->lines.push_back(line);
+}
+
 string Generator::NewLabel()
 {
     return MakeLabel('L', ++m_labelcount);
@@ -180,6 +192,7 @@ void Generator::GenerateProcedure(int procindex)
         EmitTemplateBlock("INIT");
         GenerateStatement(proc.block.body);
         EmitTemplateBlock("TERM");
+        LayoutBranches(*m_code);
         return;
     }
 

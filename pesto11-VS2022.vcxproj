@@ -165,6 +165,7 @@
     <ClCompile Include="generator-expr.cpp" />
     <ClCompile Include="generator-std.cpp" />
     <ClCompile Include="runtime.cpp" />
+    <ClCompile Include="branches.cpp" />
     <ClCompile Include="model.cpp" />
     <ClCompile Include="parser.cpp" />
     <ClCompile Include="tokenizer.cpp" />

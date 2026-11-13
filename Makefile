@@ -2,7 +2,7 @@
 CXXFLAGS = -std=c++17 -O2 -Wall -Wextra
 
 SOURCES_PESTO11 = main.cpp model.cpp parser.cpp tokenizer.cpp utility.cpp validator.cpp validator-expr.cpp validator-std.cpp \
-	codeline.cpp generator.cpp generator-stmt.cpp generator-expr.cpp generator-std.cpp runtime.cpp
+	codeline.cpp generator.cpp generator-stmt.cpp generator-expr.cpp generator-std.cpp runtime.cpp branches.cpp
 SOURCES_TESTRUNNER = testrunner/testrunner.cpp
 
 OBJECTS_PESTO11 = $(SOURCES_PESTO11:.cpp=.o)

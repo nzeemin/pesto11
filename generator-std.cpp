@@ -121,3 +121,63 @@ bool Generator::GenerateWriteItem(const ExpressionModel& expr, const ArgModel& a
 
 
 //////////////////////////////////////////////////////////////////////
+
+
+//////////////////////////////////////////////////////////////////////
+// Ordinal functions computed in place, and type casts
+
+bool Generator::GenerateStdFunction(const ExpressionModel& expr, int index)
+{
+    const ExpressionNode& node = expr.nodes[index];
+    if (node.symbol < 0)
+        return false;
+    const SymbolModel& symbol = g_program.symbols[node.symbol];
+
+    // Type cast like Char(65): the ordinal value stays the same
+    if (symbol.kind == SymType && node.args.size() == 1)
+        return GenerateValue(expr, node.args[0].node);
+
+    if (symbol.kind != SymStdFunc || node.args.size() != 1)
+        return false;  // User functions: step 3
+    string name = Validator::m_stdroutines[symbol.stdindex].name;
+    int arg = node.args[0].node;
+    if (!Validator::IsOrdinal(expr.nodes[arg].type))
+        return false;  // Real argument (Trunc, Round...): step 7
+    if (!GenerateValue(expr, arg))
+        return false;
+
+    if (name == "Ord" || name == "Chr")
+        return true;
+    if (name == "Succ")
+        Emit("INC", Operand::Reg(0));
+    else if (name == "Pred")
+        Emit("DEC", Operand::Reg(0));
+    else if (name == "Odd")
+        Emit("BIC", Operand::Imm(-2), Operand::Reg(0), "keep bit 0");
+    else if (name == "Abs")
+    {
+        string positive = NewLabel();
+        Emit("TST", Operand::Reg(0));
+        EmitBranch("BPL", positive);
+        Emit("NEG", Operand::Reg(0));
+        EmitLabel(positive);
+    }
+    else if (name == "Sqr")
+    {
+        Emit("MOV", Operand::Reg(0), Operand::Reg(1));
+        Emit("MUL", Operand::Reg(0), Operand::Reg(1));
+        Emit("MOV", Operand::Reg(1), Operand::Reg(0));
+    }
+    else if (name == "Hi")
+    {
+        Emit("SWAB", Operand::Reg(0));
+        Emit("BIC", Operand::Imm(-256), Operand::Reg(0));
+    }
+    else if (name == "Lo")
+        Emit("BIC", Operand::Imm(-256), Operand::Reg(0));
+    else if (name == "Swap")
+        Emit("SWAB", Operand::Reg(0));
+    else
+        return false;
+    return true;
+}

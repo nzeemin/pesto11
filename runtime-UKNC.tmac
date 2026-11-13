@@ -188,3 +188,133 @@ WREOL:
 	CALL	WRCH
 	MOV	#12, R0
 	JMP	WRCH
+
+;#####################################################################
+;## RTERR
+;## Need WRCH
+;## Need WREOL
+; Ошибка выполнения: печать "Run-time error NN, PC=nnnnnn", "Program aborted" и выход
+; Вход: R0 = код ошибки (печатается в hex), (SP) = адрес возврата в программу
+	.GLOBL	HALT
+RTERR:
+	MOV	R0, R3		; код ошибки
+	MOV	(SP), R4	; адрес места в программе
+	CALL	WREOL
+	MOV	#RTERM$, R1	; "Run-time error "
+	CALL	RTERS$
+	MOV	R3, R0		; старший hex-разряд
+	ASH	#-4, R0
+	CALL	RTERH$
+	MOV	R3, R0		; младший hex-разряд
+	CALL	RTERH$
+	MOV	#RTERP$, R1	; ", PC="
+	CALL	RTERS$
+	CLR	R0		; первая восьмеричная цифра -- бит 15
+	ASL	R4
+	ROL	R0
+	ADD	#'0, R0
+	CALL	WRCH
+	MOV	#5, R2		; ещё пять цифр по три бита
+1$:	CLR	R0
+	ASL	R4
+	ROL	R0
+	ASL	R4
+	ROL	R0
+	ASL	R4
+	ROL	R0
+	ADD	#'0, R0
+	CALL	WRCH
+	SOB	R2, 1$
+	CALL	WREOL
+	MOV	#RTERA$, R1	; "Program aborted"
+	CALL	RTERS$
+	CALL	WREOL
+	JMP	HALT
+; Печать строки, завершённой нулём; R1 = адрес строки
+RTERS$:	MOVB	(R1)+, R0
+	BEQ	1$
+	CALL	WRCH
+	BR	RTERS$
+1$:	RETURN
+; Печать hex-разряда; R0 = значение, берутся младшие 4 бита
+RTERH$:	BIC	#177760, R0
+	ADD	#'0, R0
+	CMP	R0, #'9
+	BLOS	1$
+	ADD	#7, R0		; 'A'..'F'
+1$:	JMP	WRCH
+RTERM$:	.ASCIZ	/Run-time error /
+RTERP$:	.ASCIZ	/, PC=/
+RTERA$:	.ASCIZ	/Program aborted/
+	.EVEN
+
+;#####################################################################
+;## DIVZER
+;## Need RTERR
+; Деление на ноль, ошибка 02; вызывается сразу после DIV, когда установлен флаг V
+DIVZER:
+	MOV	#2, R0
+	JMP	RTERR
+
+;#####################################################################
+;## RNGSCL
+;## Need RTERR
+; Проверка присваивания в поддиапазон или перечисление, ошибка 91
+; Вход: R0 = значение; после CALL: .WORD нижняя, верхняя граница. Портит: R1.
+RNGSCL:
+	MOV	(SP), R1	; адрес границ
+	CMP	R0, (R1)+
+	BLT	1$
+	CMP	R0, (R1)+
+	BGT	1$
+	MOV	R1, (SP)	; возврат за границы
+	RETURN
+1$:	MOV	#221, R0	; ошибка 91 (hex)
+	JMP	RTERR
+
+;#####################################################################
+;## RNGCHK
+;## Need RTERR
+; Проверка индекса массива, ошибка 90
+; Вход: R0 = индекс; после CALL: .WORD нижняя, верхняя граница. Портит: R1.
+RNGCHK:
+	MOV	(SP), R1	; адрес границ
+	CMP	R0, (R1)+
+	BLT	1$
+	CMP	R0, (R1)+
+	BGT	1$
+	MOV	R1, (SP)	; возврат за границы
+	RETURN
+1$:	MOV	#220, R0	; ошибка 90 (hex)
+	JMP	RTERR
+
+;#####################################################################
+;## ISHL
+; Сдвиг влево на переменное число разрядов: R0 shl R1
+; Вход: R0 = число, R1 = сдвиг. Выход: R0. Портит: R1.
+ISHL:
+	TST	R1
+	BLE	2$
+	CMP	R1, #16.
+	BLT	1$
+	CLR	R0		; сдвиг на 16 и больше
+	RETURN
+1$:	ASL	R0
+	SOB	R1, 1$
+2$:	RETURN
+
+;#####################################################################
+;## ISHR
+; Логический сдвиг вправо на переменное число разрядов: R0 shr R1
+; Вход: R0 = число, R1 = сдвиг. Выход: R0. Портит: R1.
+ISHR:
+	TST	R1
+	BLE	2$
+	CMP	R1, #16.
+	BLT	1$
+	CLR	R0		; сдвиг на 16 и больше
+	RETURN
+1$:	CLC
+	ROR	R0
+	SOB	R1, 1$
+2$:	RETURN

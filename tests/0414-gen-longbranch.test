@@ -1,0 +1,98 @@
+-q
+----------------------------------------------------------------------
+var I: Integer;
+begin
+  I := 1;
+  if I = 2 then
+  begin
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  WriteLn('x');
+  end;
+  while I < 2 do
+  begin
+    I := I + 1;
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+    Write('');
+  end;
+  WriteLn('done ', I)
+end.
+----------------------------------------------------------------------
+----------------------------------------------------------------------
+----------------------------------------------------------------------
+done 2

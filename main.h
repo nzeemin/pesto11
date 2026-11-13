@@ -994,17 +994,40 @@ private:
     void GenerateData();
     void GenerateTypedConst(const SymbolModel& symbol, const StructConstModel& value);
     void CollectTempSlots(const StatementModel& statement, std::vector<TempSlot>& slots);
+    void EmitBranch(const string& opcode, const string& label, const string& comment = "");
     // Statements, generator-stmt.cpp
     void GenerateStatement(StatementModel& statement);
     void GenerateCallStatement(StatementModel& statement);
+    bool GenerateAssign(StatementModel& statement);
+    bool GenerateIf(StatementModel& statement);
+    bool GenerateWhile(StatementModel& statement);
+    bool GenerateRepeat(StatementModel& statement);
+    bool GenerateFor(StatementModel& statement);
+    bool GenerateCase(StatementModel& statement);
+    bool GenerateGoto(StatementModel& statement);
     // Expressions, generator-expr.cpp
     bool GetVariableOperand(const ExpressionModel& expr, int index, Operand& operand);
     bool GetVariableAddress(const ExpressionModel& expr, int index, Operand& operand);
     bool LoadOrdinal(const ExpressionModel& expr, int index, int reg);
-    // Standard procedures, generator-std.cpp
+    bool GenerateValue(const ExpressionModel& expr, int index);
+    bool GetSimpleOperand(const ExpressionModel& expr, int index, Operand& operand, bool& isbyte);
+    bool GetRightOperand(const ExpressionModel& expr, int index, Operand& operand);
+    bool GenerateUnaryValue(const ExpressionModel& expr, int index);
+    bool GenerateBinaryValue(const ExpressionModel& expr, int index);
+    bool GenerateBooleanValue(const ExpressionModel& expr, int index);
+    bool GenerateCondition(const ExpressionModel& expr, int index, const string& label, bool jumpiftrue);
+    bool GenerateCompare(const ExpressionModel& expr, int index, const string& label, bool jumpiftrue);
+    bool GenerateInConst(const ExpressionModel& expr, int index, const string& label, bool jumpiftrue);
+    bool HasSideEffects(const ExpressionModel& expr, int index) const;
+    bool StoreOrdinal(const ExpressionModel& target, int index, const SourcePos& pos);
+    // Standard procedures and functions, generator-std.cpp
     void GenerateWrite(const ExpressionModel& expr, int index, bool isln);
     bool GenerateWriteItem(const ExpressionModel& expr, const ArgModel& arg);
+    bool GenerateStdFunction(const ExpressionModel& expr, int index);
 };
+
+// Branch layout: replace short branches that cannot reach their target, see branches.cpp
+void LayoutBranches(ProcedureCode& code);
 
 // Write PROG.MAC and the runtime PESTO.MAC (or one file with --onefile), see generator.cpp
 bool WriteAssemblyFiles(const FinalModel& final, const RuntimeGenerator& runtime,

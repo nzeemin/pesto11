@@ -22,6 +22,10 @@ const char* TOOLS_SUB_DIR = "x-tools";
 const char* SOURCE_FILE_NAME = "TEST.PAS";
 const char* MAC_FILE_NAME = "TEST.MAC";
 const char* RUNTIME_MAC_FILE_NAME = "PESTO.MAC";
+const char* DEBUGGER_SUB_DIR = "x-ukncbtl-debugger";
+const char* DISK_FILE_NAME = "1.dsk";       // RT-11 boot disk; its STARTS.COM runs "RU 1.SAV"
+const char* ROM_FILE_NAME = "uknc_rom.bin";
+const int   EMULATOR_RUN_FRAMES = 900;      // Boot and run time after the boot menu, 50 frames = 1 second
 
 #ifdef _WIN32
 const char* EXE_SUFFIX = ".exe";
@@ -34,6 +38,8 @@ std::vector<string> g_filters;  // Test name prefixes from the command line
 fs::path g_compilerpath;
 fs::path g_macro11path;         // Empty if the tool is not available
 fs::path g_pclink11path;        // Empty if the tool is not available
+fs::path g_rt11dskpath;         // Empty if the tool is not available
+fs::path g_debuggerpath;        // Empty if the emulator is not available
 
 int g_failedtests = 0;
 int g_failedtodo = 0;           // Failed because the .MAC file has TODOs in it
@@ -135,7 +141,19 @@ struct TestCase
     std::vector<std::pair<string, std::vector<string>>> extrafiles;  // Include files: name and lines
     std::vector<string> expected;       // Expected compiler output lines, non-empty
     std::vector<string> etalon;         // Reference .MAC lines, stripped; empty if no section
+    bool hasscreen;                     // Section 5 is present: run in the emulator
+    std::vector<string> screen;         // Expected program output on the screen
+public:
+    TestCase() : hasscreen(false) {}
 };
+
+// Section separator: a line of three or more '-' and nothing else
+static bool is_separator(const string& line)
+{
+    if (line.size() < 3)
+        return false;
+    return line.find_first_not_of('-') == string::npos;
+}
 
 static bool parse_test_file(const fs::path& path, TestCase& test)
 {
@@ -150,9 +168,11 @@ static bool parse_test_file(const fs::path& path, TestCase& test)
     int section = 2;
     while (getlinecr(file, line))
     {
-        if (!line.empty() && line[0] == '-')
+        if (is_separator(line))
         {
             section++;
+            if (section == 5)
+                test.hasscreen = true;
             continue;
         }
         switch (section)
@@ -177,10 +197,120 @@ static bool parse_test_file(const fs::path& path, TestCase& test)
             if (!line.empty())
                 test.etalon.push_back(line);
             break;
+        case 5:
+            test.screen.push_back(line);
+            break;
         default:
-            break;  // Section 5 (screen output) is not supported yet
+            break;
         }
     }
+    return true;
+}
+
+// Trim trailing spaces of every line and empty lines at both ends
+static std::vector<string> trim_screen(const std::vector<string>& lines)
+{
+    std::vector<string> result;
+    for (string line : lines)
+    {
+        while (!line.empty() && (line.back() == ' ' || line.back() == '\r'))
+            line.pop_back();
+        result.push_back(line);
+    }
+    while (!result.empty() && result.back().empty())
+        result.pop_back();
+    while (!result.empty() && result.front().empty())
+        result.erase(result.begin());
+    return result;
+}
+
+// The debugger writes UTF-16LE; convert to UTF-8 lines
+static std::vector<string> read_utf16_lines(const fs::path& path)
+{
+    std::ifstream file(path, std::ios::in | std::ios::binary);
+    string bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    std::vector<string> lines;
+    string line;
+    for (size_t i = 0; i + 1 < bytes.size(); i += 2)
+    {
+        unsigned code = (unsigned char)bytes[i] | ((unsigned)(unsigned char)bytes[i + 1] << 8);
+        if (code == 0xFEFF || code == '\r')
+            continue;
+        if (code == '\n')
+        {
+            lines.push_back(line);
+            line.clear();
+            continue;
+        }
+        if (code < 0x80)
+            line += (char)code;
+        else if (code < 0x800)
+        {
+            line += (char)(0xC0 | (code >> 6));
+            line += (char)(0x80 | (code & 0x3F));
+        }
+        else
+        {
+            line += (char)(0xE0 | (code >> 12));
+            line += (char)(0x80 | ((code >> 6) & 0x3F));
+            line += (char)(0x80 | (code & 0x3F));
+        }
+    }
+    if (!line.empty())
+        lines.push_back(line);
+    return lines;
+}
+
+// Run TEST.SAV in the UKNC emulator: put it as 1.SAV on a copy of the boot disk, boot,
+// read the screen; returns the program output lines between ".RU 1.SAV" and the next "." prompt
+static bool run_in_emulator(const fs::path& testdir, std::vector<string>& output, string& error)
+{
+    fs::path debuggerdir = g_debuggerpath.parent_path();
+    std::error_code ec;
+    fs::copy_file(debuggerdir / DISK_FILE_NAME, testdir / DISK_FILE_NAME, fs::copy_options::overwrite_existing, ec);
+    fs::copy_file(debuggerdir / ROM_FILE_NAME, testdir / ROM_FILE_NAME, fs::copy_options::overwrite_existing, ec);
+    fs::copy_file(testdir / "TEST.SAV", testdir / "1.SAV", fs::copy_options::overwrite_existing, ec);
+    if (ec)
+    {
+        error = "cannot copy files for the emulator: " + ec.message();
+        return false;
+    }
+    run_command(testdir, g_rt11dskpath, string("d ") + DISK_FILE_NAME + " 1.SAV", "TEST.outdsk");
+    run_command(testdir, g_rt11dskpath, string("a ") + DISK_FILE_NAME + " 1.SAV", "TEST.outdsk");
+
+    {
+        std::ofstream script(testdir / "TEST.script", std::ios::out | std::ios::binary);
+        script << "disk1 attach " << DISK_FILE_NAME << "\n"
+               << "reset\n" << "cf200\n" << "k 1\n" << "cf50\n" << "k ENTER\n"
+               << "cf" << EMULATOR_RUN_FRAMES << "\n" << "screentext\n" << "q\n";
+    }
+    run_command(testdir, g_debuggerpath, "<TEST.script", "TEST.screen");
+
+    std::vector<string> lines = read_utf16_lines(testdir / "TEST.screen");
+    size_t start = 0;
+    while (start < lines.size() && lines[start].compare(0, 9, ".RU 1.SAV") != 0)
+        start++;
+    if (start >= lines.size())
+    {
+        error = "the program did not start in the emulator, see TEST.screen";
+        return false;
+    }
+    size_t end = start + 1;
+    while (end < lines.size())
+    {
+        string trimmed = lines[end];
+        while (!trimmed.empty() && trimmed.back() == ' ')
+            trimmed.pop_back();
+        if (trimmed == ".")
+            break;
+        end++;
+    }
+    if (end >= lines.size())
+    {
+        error = "the program did not finish in the emulator, see TEST.screen";
+        return false;
+    }
+    output = trim_screen(std::vector<string>(lines.begin() + start + 1, lines.begin() + end));
     return true;
 }
 
@@ -362,6 +492,36 @@ static void process_test(const string& testname, const fs::path& testfilepath)
                 return;
             }
         }
+
+        // Run in the emulator and compare the screen with section 5
+        if (test.hasscreen && !g_rt11dskpath.empty() && !g_debuggerpath.empty())
+        {
+            std::vector<string> output;
+            string error;
+            if (!run_in_emulator(testdir, output, error))
+            {
+                test_failed(error);
+                return;
+            }
+            std::vector<string> expected = trim_screen(test.screen);
+            if (output != expected)
+            {
+                test_failed("program output in the emulator is different");
+                size_t count = std::max(output.size(), expected.size());
+                for (size_t i = 0; i < count; i++)
+                {
+                    const string& exp = (i < expected.size()) ? expected[i] : string("<none>");
+                    const string& act = (i < output.size()) ? output[i] : string("<none>");
+                    if (exp == act)
+                        continue;
+                    std::cout << "    expected: " << exp << std::endl;
+                    std::cout << "    actual:   " << act << std::endl;
+                }
+                return;
+            }
+            std::cout << "OK (run)" << std::endl;
+            return;
+        }
     }
 
     std::cout << "OK" << std::endl;
@@ -420,6 +580,15 @@ int main(int argc, char* argv[])
 
     g_macro11path = find_tool("macro11");
     g_pclink11path = find_tool("pclink11");
+    g_rt11dskpath = find_tool("rt11dsk");
+    {
+        fs::path debugger = fs::absolute(fs::path(DEBUGGER_SUB_DIR) / (string("ukncbtldebug") + EXE_SUFFIX));
+        fs::path debuggerdir = debugger.parent_path();
+        if (fs::exists(debugger) && fs::exists(debuggerdir / DISK_FILE_NAME) && fs::exists(debuggerdir / ROM_FILE_NAME))
+            g_debuggerpath = debugger;
+    }
+    if (g_rt11dskpath.empty() || g_debuggerpath.empty())
+        std::cout << "rt11dsk or the emulator (" << DEBUGGER_SUB_DIR << ") not found, runs in the emulator are skipped" << std::endl;
     if (g_macro11path.empty() || g_pclink11path.empty())
         std::cout << "macro11/pclink11 not found in " << TOOLS_SUB_DIR << ", assembling and linking are skipped" << std::endl;
 
