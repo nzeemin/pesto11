@@ -7,9 +7,6 @@
 ;#####################################################################
 ;## INIT
 ; Инициализация программы, вставляется в начало кода программы
-	MTPS	#340		; запрет прерываний
-	CLR	@#177560	; канал 0: без прерываний от клавиатуры
-	MTPS	#0		; разрешение прерываний
 	MOV	SP, INIT$S	; стек RT-11 для выхода
 	MOV	#-2, R0		; .SETTOP: просим всю память
 	EMT	354		; в R0 -- верх памяти программы
@@ -200,11 +197,13 @@ WREOL:
 ; Ошибка выполнения: печать "Run-time error NN, PC=nnnnnn", "Program aborted" и выход
 ; Вход: R0 = код ошибки (печатается в hex), (SP) = адрес возврата в программу
 	.GLOBL	HALT
+; IOERR: то же для I/O-ошибок: "I/O error NN, PC=nnnnnn"
+IOERR:	MOV	#RTERI$, RTER$P
 RTERR:
 	MOV	R0, R3		; код ошибки
 	MOV	(SP), R4	; адрес места в программе
 	CALL	WREOL
-	MOV	#RTERM$, R1	; "Run-time error "
+	MOV	RTER$P, R1	; "Run-time error " или "I/O error "
 	CALL	RTERS$
 	MOV	R3, R0		; старший hex-разряд
 	ASH	#-4, R0
@@ -247,7 +246,9 @@ RTERH$:	BIC	#177760, R0
 	BLOS	1$
 	ADD	#7, R0		; 'A'..'F'
 1$:	JMP	WRCH
+RTER$P:	.WORD	RTERM$
 RTERM$:	.ASCIZ	/Run-time error /
+RTERI$:	.ASCIZ	|I/O error |
 RTERP$:	.ASCIZ	/, PC=/
 RTERA$:	.ASCIZ	/Program aborted/
 	.EVEN
@@ -2577,3 +2578,263 @@ FLOG$X:	JMP	@#000000	; возврат
 	.WORD	040400, 000000	; c1 = 2.0
 FLOGT:
 FLOG$P: .WORD	0		; сохранённый указатель на аргумент
+
+;#####################################################################
+;## BUFLEN
+; BufLen: наибольшая длина следующего ввода строки с консоли; после ввода снова 127
+BUFLEN:	.WORD	127.
+
+;#####################################################################
+;## RDLINE
+;## Need BUFLEN
+; Ввод строки с консоли через RT-11 в строчном режиме: эхо, ЗАБОЙ и ^U делает RT-11.
+; Строка -- в RDBUF, в конце ^Z; указатель чтения RDPTR -- на начало. Портит: R0, R1, R2.
+RDLINE:
+	BIC	#10100, @#44	; JSW: обычный режим терминала, с ожиданием
+	MOV	#RDBUF, R1
+	MOV	BUFLEN, R2	; сколько символов можно сохранить
+	MOV	#127., BUFLEN
+1$:	EMT	340		; .TTINR
+	BCS	1$
+	CMPB	R0, #12		; LF -- конец строки
+	BEQ	3$
+	CMPB	R0, #15		; CR не сохраняется
+	BEQ	1$
+	TST	R2
+	BLE	1$		; длиннее BufLen: лишнее не сохраняется
+	MOVB	R0, (R1)+
+	DEC	R2
+	BR	1$
+3$:	MOVB	#32, (R1)	; ^Z -- конец строки
+	MOV	#RDBUF, RDPTR
+	RETURN
+; Пропуск пробелов и табуляций. Выход: R1 = RDPTR
+RDSKP$:	MOV	RDPTR, R1
+1$:	CMPB	(R1), #40
+	BEQ	2$
+	CMPB	(R1), #11
+	BNE	3$
+2$:	INC	R1
+	BR	1$
+3$:	MOV	R1, RDPTR
+	RETURN
+; Очередное слово строки (до пробела, табуляции или конца) в RDTOK как строка Pascal.
+; Выход: C = 1, если до конца строки слов нет. Портит: R0, R1, R2.
+RDTOK$:	CALL	RDSKP$
+	CMPB	(R1), #32
+	BEQ	9$		; конец строки
+	MOV	#RDTOK+1, R2
+	CLR	R0		; длина
+1$:	CMPB	(R1), #40
+	BEQ	3$
+	CMPB	(R1), #11
+	BEQ	3$
+	CMPB	(R1), #32
+	BEQ	3$
+	CMP	R0, #40.
+	BHIS	2$		; длиннее 40 символов: остальное не сохраняется
+	MOVB	(R1), (R2)+
+	INC	R0
+2$:	INC	R1
+	BR	1$
+3$:	MOV	R1, RDPTR
+	MOVB	R0, RDTOK
+	CLC
+	RETURN
+9$:	SEC
+	RETURN
+RDPTR:	.WORD	RDBUF
+RDBUF:	.BYTE	32		; до первого ввода -- пустая строка
+	.BLKB	255.
+RDTOK:	.BLKB	42.
+
+;#####################################################################
+;## RDINT
+;## Need RDLINE
+;## Need VALI
+;## Need RTERR
+; Read Integer из строки ввода: пробелы и табуляции пропускаются, число до пробела,
+; табуляции или конца строки. Выход: R0 = число, C = 0; C = 1 -- чисел больше нет
+; (переменная не меняется, как в TP3). Ошибка формата -- I/O-ошибка 10. Портит: R1-R4.
+RDINT:
+	CALL	RDTOK$
+	BCS	1$
+	MOV	#RDTOK, R0
+	CALL	VALI
+	TST	R1
+	BNE	2$
+1$:	RETURN			; C = 0 после TST
+2$:	MOV	#20, R0		; I/O-ошибка 10: ошибка в числе
+	JMP	IOERR
+
+;#####################################################################
+;## RDREAL
+;## Need RDLINE
+;## Need VALR
+;## Need RTERR
+; Read Real из строки ввода. Выход: Real на стеке и C = 0; C = 1 -- чисел больше нет
+; (на стек ничего не кладётся). Ошибка формата -- I/O-ошибка 10. Портит: R0-R4.
+RDREAL:
+	CALL	RDTOK$
+	BCS	9$
+	MOV	(SP)+, RDRE$R	; адрес возврата
+	MOV	#RDTOK, R0
+	CALL	VALR		; на стеке Real и над ним код ошибки
+	TST	(SP)+
+	BNE	2$
+	CLC
+	JMP	@RDRE$R
+2$:	CMP	(SP)+, (SP)+	; Real не нужен
+	MOV	RDRE$R, -(SP)	; адрес для печати PC
+	MOV	#20, R0		; I/O-ошибка 10
+	JMP	IOERR
+9$:	RETURN
+RDRE$R:	.WORD	0
+
+;#####################################################################
+;## RDCH
+;## Need RDLINE
+; Read Char из строки ввода; в конце строки -- ^Z (и чтение остаётся в конце).
+; Выход: R0 = символ. Портит: R1.
+RDCH:
+	MOV	RDPTR, R1
+	CLR	R0
+	BISB	(R1), R0
+	CMPB	R0, #32
+	BEQ	1$
+	INC	RDPTR
+1$:	RETURN
+
+;#####################################################################
+;## RDSTR
+;## Need RDLINE
+; Read строки: остаток строки ввода, не длиннее максимальной длины переменной.
+; Вход: R0 = строка, R1 = максимальная длина. Портит: R2, R3, R4.
+RDSTR:
+	MOV	R0, R2
+	INC	R2		; куда: первый символ
+	MOV	RDPTR, R3
+	CLR	R4		; длина
+1$:	CMP	R4, R1
+	BHIS	2$
+	CMPB	(R3), #32
+	BEQ	2$
+	MOVB	(R3)+, (R2)+
+	INC	R4
+	BR	1$
+2$:	MOVB	R4, (R0)
+	MOV	R3, RDPTR
+	RETURN
+
+;#####################################################################
+;## EOLN
+;## Need RDLINE
+; Eoln и Eof для консоли: следующий символ строки ввода -- ^Z (конец строки).
+; Выход: R0 = 0/1.
+EOLN:
+	CLR	R0
+	CMPB	@RDPTR, #32
+	BNE	1$
+	INC	R0
+1$:	RETURN
+
+;#####################################################################
+;## KEYPR
+; KeyPressed: есть ли нажатая клавиша. Символ запоминается до Read(Kbd, C).
+; RT-11 в специальном режиме терминала (без эха), без ожидания. LF после CR не считается.
+; Выход: R0 = 0/1.
+KEYPR:
+	TST	KBCHR
+	BPL	2$		; символ уже есть
+	BIS	#10100, @#44	; JSW: специальный режим, .TTINR без ожидания
+1$:	EMT	340		; .TTINR
+	BCS	3$
+	BIC	#177400, R0
+	CMP	R0, #12
+	BEQ	1$		; LF после CR пропускается
+	MOV	R0, KBCHR
+2$:	MOV	#1, R0
+	RETURN
+3$:	CLR	R0
+	RETURN
+KBCHR:	.WORD	-1		; запомненный символ, -1 -- нет
+
+;#####################################################################
+;## RDKBD
+;## Need KEYPR
+; Read(Kbd, C): символ без эха, с ожиданием. Выход: R0 = символ.
+RDKBD:
+	CALL	KEYPR
+	TST	R0
+	BEQ	RDKBD
+	MOV	KBCHR, R0
+	MOV	#-1, KBCHR
+	RETURN
+
+;#####################################################################
+;## CLRSCR
+;## Need WRCH
+; ClrScr: ^L очищает экран и ставит курсор в начало
+CLRSCR:
+	MOV	R0, -(SP)
+	MOV	#14, R0
+	CALL	WRCH
+	MOV	(SP)+, R0
+	RETURN
+
+;#####################################################################
+;## CLREOL
+;## Need WRCH
+; ClrEol: ESC K -- очистка до конца строки
+CLREOL:
+	MOV	R0, -(SP)
+	MOV	#33, R0
+	CALL	WRCH
+	MOV	#'K, R0
+	CALL	WRCH
+	MOV	(SP)+, R0
+	RETURN
+
+;#####################################################################
+;## GOTOXY
+;## Need WRCH
+; GotoXY(X, Y): ESC Y (Y-1+40) (X-1+40), отсчёт от 1 как в TP3
+; Вход: R0 = X, R1 = Y. Портит: R0.
+GOTOXY:
+	MOV	R0, -(SP)
+	MOV	#33, R0
+	CALL	WRCH
+	MOV	#'Y, R0
+	CALL	WRCH
+	MOV	R1, R0
+	ADD	#37, R0
+	CALL	WRCH
+	MOV	(SP)+, R0
+	ADD	#37, R0
+	JMP	WRCH
+
+;#####################################################################
+;## DELAY
+; Delay(ms): ожидание по таймеру 50 Гц (.GTIM), (ms + 19) / 20 тиков.
+; Вход: R0 = миллисекунды. Портит: R0-R3.
+DELAY:
+	MOV	R0, R1
+	ADD	#19., R1
+	CLR	R0
+	DIV	#20., R0	; R0 = тиков
+	MOV	R0, R2
+	BLE	3$
+	CALL	1$
+	MOV	DELA$T+2, R3	; начало
+2$:	CALL	1$
+	MOV	DELA$T+2, R0
+	SUB	R3, R0
+	CMP	R0, R2
+	BLO	2$
+3$:	RETURN
+1$:	MOV	#DELA$A, R0
+	EMT	375		; .GTIM
+	RETURN
+DELA$A:	.BYTE	0, 21		; канал 0, код .GTIM
+	.WORD	DELA$T
+DELA$T:	.WORD	0, 0

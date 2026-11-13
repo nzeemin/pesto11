@@ -44,9 +44,6 @@ end.
 === MAC EXPECTED ======================================================
 	.TITLE	TEST
 START::
-	MTPS	#340
-	CLR	@#177560
-	MTPS	#0
 	MOV	SP, INIT$S
 	MOV	#-2, R0
 	EMT	354

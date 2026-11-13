@@ -14,5 +14,5 @@ end.
 === SCREEN EXPECTED ===================================================
 in range 5x3
 
-Run-time error 90, PC=001260
+Run-time error 90, PC=001244
 Program aborted

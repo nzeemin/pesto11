@@ -1,0 +1,47 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Inp;
+var I, J: Integer; R: Real; S: string[10]; C, D: Char;
+begin
+  ClrScr;
+  Write('I J? '); ReadLn(I, J); WriteLn('Sum=', I + J);
+  Write('R? '); ReadLn(R); WriteLn(R:8:3);
+  Write('S? '); ReadLn(S); WriteLn('[', S, ']');
+  Write('C D? '); Read(C, D); WriteLn(Ord(C), ' ', Ord(D));
+  I := 5; Write('Empty? '); ReadLn(I); WriteLn('I=', I, ' ', Eoln);
+  BufLen := 3; Write('Buf? '); ReadLn(S); WriteLn('[', S, ']');
+  GotoXY(30, 2); Write('AT30,2'); ClrEol;
+  GotoXY(1, 16);
+  while not KeyPressed do;
+  Read(Kbd, C, D);
+  WriteLn('Kbd ', Ord(C), ' ', Ord(D));
+  Delay(500);
+  WriteLn('Done');
+  Write('Bad? '); ReadLn(I)
+end.
+=== KEYS INPUT ========================================================
+12 30{ENTER}2.5{ENTER}HELLO WORLD{ENTER}AB{ENTER}{ENTER}ABCDEF{ENTER}
+XY
+1X{ENTER}
+=== SCREEN EXPECTED ===================================================
+I J? Sum=42
+R?    2.500                  AT30,2
+S? RLD
+[HELLO WORL]
+C D? AB
+65 66
+Empty?
+I=5 TRUE
+Buf? ABCDEF
+[ABC]
+
+
+
+
+
+Kbd 88 89
+Done
+Bad? X
+
+I/O error 10, PC=001742
+Program aborted

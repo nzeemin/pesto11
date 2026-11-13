@@ -161,6 +161,25 @@ bool Generator::GenerateStdFunction(const ExpressionModel& expr, int index)
     }
     if (name == "Length" || name == "Pos")
         return GenerateStringFunction(name, expr, index);
+    if (name == "KeyPressed" && node.args.empty())
+    {
+        EmitCall("KEYPR", "KeyPressed");
+        return true;
+    }
+    if (name == "Eoln" || name == "Eof")
+    {
+        // Console only for now: Input, Con, Trm or no file; files: step 9
+        if (!node.args.empty())
+        {
+            const ExpressionNode& file = expr.nodes[node.args[0].node];
+            if (file.symbol < 0 || g_program.symbols[file.symbol].kind != SymStdVar ||
+                (g_program.symbols[file.symbol].name != "Input" && g_program.symbols[file.symbol].name != "Con" &&
+                 g_program.symbols[file.symbol].name != "Trm"))
+                return false;
+        }
+        EmitCall("EOLN", name + ": the next character is ^Z");
+        return true;
+    }
     if ((name == "Trunc" || name == "Round") && node.args.size() == 1)
         return GenerateRealToInteger(name, expr, node.args[0].node);
     if (name == "Random" && node.args.size() == 1)
@@ -302,6 +321,36 @@ bool Generator::GenerateStdProcedure(const string& name, const ExpressionModel& 
     }
     if (name == "Insert" || name == "Delete" || name == "Str" || name == "Val")
         return GenerateStringProcedure(name, expr, index);
+    if (name == "Read" || name == "ReadLn")
+        return GenerateRead(expr, index);
+    if ((name == "ClrScr" || name == "ClrEol") && args.empty())
+    {
+        EmitCall(name == "ClrScr" ? "CLRSCR" : "CLREOL", name);
+        return true;
+    }
+    if ((name == "InsLine" || name == "DelLine" || name == "CrtInit" || name == "CrtExit") && args.empty())
+    {
+        EmitComment(name + ": nothing to do on UKNC");  // DESIGN 7.7
+        return true;
+    }
+    if (name == "GotoXY" && args.size() == 2)
+    {
+        std::vector<RuntimeArg> rtargs;
+        rtargs.push_back(RuntimeArg(RuntimeArg::Value, args[0].node, 0));
+        rtargs.push_back(RuntimeArg(RuntimeArg::Value, args[1].node, 1));
+        int buffers;
+        if (!LoadRuntimeArgs(expr, rtargs, buffers))
+            return false;
+        EmitCall("GOTOXY");
+        return true;
+    }
+    if (name == "Delay" && args.size() == 1)
+    {
+        if (!LoadOrdinal(expr, args[0].node, 0))
+            return false;
+        EmitCall("DELAY");
+        return true;
+    }
     if (name == "Randomize" && args.empty())
     {
         EmitCall("RANDZ", "Randomize");
@@ -364,6 +413,97 @@ bool Generator::GenerateStdProcedure(const string& name, const ExpressionModel& 
         return true;
     }
     return false;
+}
+
+
+//////////////////////////////////////////////////////////////////////
+// Read and ReadLn from the console, see docs/DESIGN.md section 7.7
+
+static string GetStdFileName(const ExpressionModel& expr, int index)
+{
+    const ExpressionNode& node = expr.nodes[index];
+    if (node.symbol < 0 || g_program.symbols[node.symbol].kind != SymStdVar)
+        return "";
+    return g_program.symbols[node.symbol].name;
+}
+
+// TP3 {$B+} mode: every Read or ReadLn inputs a new line through RT-11, then the variables
+// take their values from it; a number missing from the line leaves its variable unchanged.
+// Read(Kbd, C) takes characters from the keyboard without echo.
+bool Generator::GenerateRead(const ExpressionModel& expr, int index)
+{
+    const ExpressionNode& node = expr.nodes[index];
+    const std::vector<ArgModel>& args = node.args;
+    size_t first = 0;
+    bool kbd = false;
+    if (!args.empty() && Validator::IsFileType(expr.nodes[args[0].node].type))
+    {
+        string file = GetStdFileName(expr, args[0].node);
+        if (file == "Kbd")
+            kbd = true;
+        else if (file != "Input" && file != "Con" && file != "Trm")
+            return false;  // Files: step 9
+        first = 1;
+    }
+
+    if (kbd)
+    {
+        for (size_t i = first; i < args.size(); i++)
+        {
+            if (!Validator::IsCharType(expr.nodes[args[i].node].type))
+                return false;
+            EmitCall("RDKBD", "Read(Kbd)");
+            if (!StoreOrdinal(expr, args[i].node, node.token.pos))
+                return false;
+        }
+        return true;
+    }
+
+    EmitCall("RDLINE", "input a line");
+    for (size_t i = first; i < args.size(); i++)
+    {
+        int arg = args[i].node;
+        int type = expr.nodes[arg].type;
+        if (Validator::IsCharType(type))
+        {
+            EmitCall("RDCH");
+            if (!StoreOrdinal(expr, arg, node.token.pos))
+                return false;
+        }
+        else if (Validator::IsStringType(type))
+        {
+            std::vector<RuntimeArg> rtargs;
+            rtargs.push_back(RuntimeArg(RuntimeArg::Address, arg, 0));
+            const TypeModel& model = Validator::GetType(type);
+            rtargs.push_back(RuntimeArg(RuntimeArg::Immediate, -1, 1, (model.high > 0 && model.high <= 255) ? model.high : 255));
+            int buffers;
+            if (!LoadRuntimeArgs(expr, rtargs, buffers))
+                return false;
+            EmitCall("RDSTR");
+        }
+        else if (Validator::IsRealType(type))
+        {
+            string skip = NewLabel();
+            EmitCall("RDREAL");
+            m_usesreal = true;
+            EmitBranch("BCS", skip, "no number: the variable keeps its value");
+            if (!StoreReal(expr, arg))
+                return false;
+            EmitLabel(skip);
+        }
+        else if (Validator::IsOrdinal(type))
+        {
+            string skip = NewLabel();
+            EmitCall("RDINT");
+            EmitBranch("BCS", skip, "no number: the variable keeps its value");
+            if (!StoreOrdinal(expr, arg, node.token.pos))
+                return false;
+            EmitLabel(skip);
+        }
+        else
+            return false;
+    }
+    return true;
 }
 
 

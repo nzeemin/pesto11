@@ -1066,6 +1066,7 @@ private:
     bool GenerateWriteItem(const ExpressionModel& expr, const ArgModel& arg);
     bool GenerateStdFunction(const ExpressionModel& expr, int index);
     bool GenerateStdProcedure(const string& name, const ExpressionModel& expr, int index);
+    bool GenerateRead(const ExpressionModel& expr, int index);
     // Strings, generator-str.cpp
     bool IsSimpleString(const ExpressionModel& expr, int index);
     bool LoadStringAddress(const ExpressionModel& expr, int index, int reg);

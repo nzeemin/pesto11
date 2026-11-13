@@ -35,7 +35,7 @@ static bool IsMemArray(const ExpressionModel& expr, int index)
 
 static bool IsHeapPtr(const SymbolModel& symbol)
 {
-    return symbol.kind == SymStdVar && symbol.name == "HeapPtr";
+    return symbol.kind == SymStdVar && (symbol.name == "HeapPtr" || symbol.name == "BufLen");
 }
 
 // Operand that needs no register: a global, an absolute address, or a slot in the current frame
@@ -106,8 +106,10 @@ bool Generator::GetSymbolOperand(int symindex, int reg, bool emit, Operand& oper
     const SymbolModel& symbol = g_program.symbols[symindex];
     if (IsHeapPtr(symbol))
     {
-        operand = Operand::Label("HEAPPT");
-        m_final->runtimeneeds.insert("HEAPPT");
+        // Standard variables kept by the runtime: HeapPtr, BufLen
+        string label = (symbol.name == "HeapPtr") ? "HEAPPT" : "BUFLEN";
+        operand = Operand::Label(label);
+        m_final->runtimeneeds.insert(label);
         return true;
     }
     if (!IsVariableSymbol(symbol))

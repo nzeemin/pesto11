@@ -13,5 +13,5 @@ end.
 === SCREEN EXPECTED ===================================================
 free TRUE
 
-Run-time error FF, PC=001112
+Run-time error FF, PC=001076
 Program aborted

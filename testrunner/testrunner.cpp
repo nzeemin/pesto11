@@ -316,7 +316,42 @@ static std::vector<string> read_utf16_lines(const fs::path& path)
 
 // Run TEST.SAV in the UKNC emulator: put it as 1.SAV on a copy of the boot disk, boot,
 // read the screen; returns the program output lines between ".RU 1.SAV" and the next "." prompt
-static bool run_in_emulator(const fs::path& testdir, std::vector<string>& output, string& error)
+// KEYS INPUT section as debugger commands: one "k" per character; {NAME} is a named key,
+// {LBRACE} and {RBRACE} are the braces; line breaks mean nothing
+static string keys_to_script(const std::vector<string>& keys)
+{
+    string script;
+    for (const string& line : keys)
+    {
+        for (size_t i = 0; i < line.size(); i++)
+        {
+            char ch = line[i];
+            if (ch == '\r')
+                continue;
+            string key;
+            if (ch == '{')
+            {
+                size_t close = line.find('}', i);
+                if (close == string::npos)
+                    close = line.size();
+                key = line.substr(i + 1, close - i - 1);
+                i = close;
+                if (key == "LBRACE")
+                    key = "{";
+                else if (key == "RBRACE")
+                    key = "}";
+            }
+            else if (ch == ' ')
+                key = "SPACE";
+            else
+                key = string(1, ch);
+            script += "k " + key + "\ncf3\n";  // A pause: the keyboard buffer of the PPU is small
+        }
+    }
+    return script;
+}
+
+static bool run_in_emulator(const fs::path& testdir, const std::vector<string>& keys, std::vector<string>& output, string& error)
 {
     fs::path debuggerdir = g_debuggerpath.parent_path();
     std::error_code ec;
@@ -334,8 +369,10 @@ static bool run_in_emulator(const fs::path& testdir, std::vector<string>& output
     {
         std::ofstream script(testdir / "TEST.script", std::ios::out | std::ios::binary);
         script << "disk1 attach " << DISK_FILE_NAME << "\n"
-               << "reset\n" << "cf200\n" << "k 1\n" << "cf50\n" << "k ENTER\n"
-               << "cf" << EMULATOR_RUN_FRAMES << "\n" << "screentext\n" << "q\n";
+               << "reset\n" << "cf200\n" << "k 1\n" << "cf50\n" << "k ENTER\n";
+        if (!keys.empty())  // RT-11 keeps the keys typed ahead until the program reads them
+            script << "cf60\n" << keys_to_script(keys);
+        script << "cf" << EMULATOR_RUN_FRAMES << "\n" << "screentext\n" << "q\n";
     }
     run_command(testdir, g_debuggerpath, "<TEST.script", "TEST.screen");
 
@@ -345,8 +382,40 @@ static bool run_in_emulator(const fs::path& testdir, std::vector<string>& output
         start++;
     if (start >= lines.size())
     {
-        error = "the program did not start in the emulator, see TEST.screen";
-        return false;
+        // ClrScr removes the ".RU 1.SAV" line: then the output starts after the debugger prompt
+        // that precedes the screen text, but only if the program has finished ("." is there)
+        size_t prompt = lines.size();
+        for (size_t i = 0; i < lines.size(); i++)
+        {
+            if (lines[i].compare(0, 4, "PPU:") == 0 || lines[i].compare(0, 4, "CPU:") == 0)
+            {
+                prompt = i;
+                break;
+            }
+        }
+        bool finished = false;
+        for (const string& line : lines)
+        {
+            string trimmed = line;
+            while (!trimmed.empty() && trimmed.back() == ' ')
+                trimmed.pop_back();
+            if (trimmed == ".")
+                finished = true;
+        }
+        if (!finished || prompt >= lines.size())
+        {
+            error = "the program did not start in the emulator, see TEST.screen";
+            return false;
+        }
+        // The screen text follows the last debugger line before it
+        start = prompt;
+        for (size_t i = prompt; i < lines.size(); i++)
+        {
+            if (lines[i].compare(0, 4, "PPU:") == 0 || lines[i].compare(0, 4, "CPU:") == 0)
+                start = i;
+            else
+                break;
+        }
     }
     size_t end = start + 1;
     while (end < lines.size())
@@ -552,7 +621,7 @@ static void process_test(const string& testname, const fs::path& testfilepath)
         {
             std::vector<string> output;
             string error;
-            if (!run_in_emulator(testdir, output, error))
+            if (!run_in_emulator(testdir, test.keys, output, error))
             {
                 test_failed(error);
                 return;
