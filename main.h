@@ -1153,6 +1153,7 @@ private:
     bool GenerateStdProcedure(const string& name, const ExpressionModel& expr, int index);
     bool GenerateRead(const ExpressionModel& expr, int index);
     bool GenerateReadItems(const ExpressionModel& expr, int index, size_t first);
+    bool GenerateIncDec(bool isinc, const ExpressionModel& expr, int index);
     // Files, generator-file.cpp
     void EmitIOCheck(const ExpressionNode& node);
     bool GenerateFileProcedure(const string& name, const ExpressionModel& expr, int index);

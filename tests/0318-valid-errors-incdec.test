@@ -1,0 +1,25 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program IncDecErr;
+var I: Integer; X: Real; S: string[5]; P: ^Integer;
+procedure Own(var V: Integer);
+begin
+  V := V * 2
+end;
+begin
+  Inc(5);
+  Inc(X);
+  Dec(S);
+  Inc(P);
+  Inc(I, 1.5);
+  Inc(I, 1, 2);
+  Inc
+end.
+=== OUTPUT ============================================================
+TEST.PAS(8,7): error: Variable expected
+TEST.PAS(9,7): error 30: Simple type expected: a variable of an ordinal type
+TEST.PAS(10,7): error 30: Simple type expected: a variable of an ordinal type
+TEST.PAS(11,7): error 30: Simple type expected: a variable of an ordinal type
+TEST.PAS(12,10): error 23: Integer expression expected
+TEST.PAS(13,3): error: Wrong number of parameters for Inc
+TEST.PAS(14,3): error: Wrong number of parameters for Inc

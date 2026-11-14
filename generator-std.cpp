@@ -378,6 +378,8 @@ bool Generator::GenerateStdProcedure(const string& name, const ExpressionModel& 
         EmitCall("RANDZ", "Randomize");
         return true;
     }
+    if ((name == "Inc" || name == "Dec") && !args.empty())
+        return GenerateIncDec(name == "Inc", expr, index);
     if (name == "Release" && args.size() == 1)
     {
         if (!LoadOrdinal(expr, args[0].node, 0))
@@ -547,6 +549,93 @@ bool Generator::GenerateReadItems(const ExpressionModel& expr, int index, size_t
         else
             return false;
     }
+    return true;
+}
+
+
+//////////////////////////////////////////////////////////////////////
+
+// Inc(X[, N]), Dec(X[, N]) from TP4: X is computed once, no range check. See docs/DESIGN.md section 7.4.
+// N is computed first: a function call in it must not spoil the address of X in R3.
+bool Generator::GenerateIncDec(bool isinc, const ExpressionModel& expr, int index)
+{
+    const std::vector<ArgModel>& args = expr.nodes[index].args;
+    int x = args[0].node;
+    bool isbyte = (Validator::TypeSize(expr.nodes[x].type) == 1);
+    const string& name = expr.nodes[x].token.text;
+    const char* addop = isinc ? "ADD" : "SUB";
+    Operand target;
+
+    int64_t step = 1;
+    bool isconst = true;
+    if (args.size() > 1)
+    {
+        const ExpressionNode& n = expr.nodes[args[1].node];
+        isconst = n.isconst;
+        if (isconst)
+            step = (int16_t)(n.constvalue.ivalue & 0xFFFF);
+    }
+    if (isconst)
+    {
+        if (step == 0)
+            return true;
+        if (step == 1 || step == -1)
+        {
+            bool up = (step == 1) == isinc;
+            if (!GenerateDesignator(expr, x, 3, target))
+                return false;
+            Emit(up ? (isbyte ? "INCB" : "INC") : (isbyte ? "DECB" : "DEC"), target, Operand(), name);
+            return true;
+        }
+        if (!isbyte)
+        {
+            if (!GenerateDesignator(expr, x, 3, target))
+                return false;
+            Emit(addop, Operand::Imm(step), target, name);
+            return true;
+        }
+        // A byte and a constant: no R0 needed
+        if (!GenerateDesignator(expr, x, 3, target))
+            return false;
+        Emit("CLR", Operand::Reg(1));
+        Emit("BISB", target, Operand::Reg(1), name);
+        Emit(addop, Operand::Imm(step), Operand::Reg(1));
+        Emit("MOVB", Operand::Reg(1), target);
+        return true;
+    }
+    else
+    {
+        Operand simple;
+        bool simplebyte;
+        if (!isbyte && GetSimpleOperand(expr, args[1].node, simple, simplebyte) && !simplebyte)
+        {
+            if (!GenerateDesignator(expr, x, 3, target))
+                return false;
+            Emit(addop, simple, target, name);
+            return true;
+        }
+        if (!GenerateValue(expr, args[1].node))
+            return false;
+    }
+
+    // R0 = N; the address code of X may need R0 itself: N waits on the stack then
+    bool push = DesignatorUsesR0(expr, x);
+    if (push)
+        Emit("MOV", Operand::Reg(0), Operand::AutoDec(6));
+    if (!GenerateDesignator(expr, x, 3, target))
+        return false;
+    if (push)
+        Emit("MOV", Operand::AutoInc(6), Operand::Reg(0));
+    if (!isbyte)
+    {
+        Emit(addop, Operand::Reg(0), target, name);
+        return true;
+    }
+    // No ADDB on PDP-11: the byte through R1
+    Emit("CLR", Operand::Reg(1));
+    Emit("BISB", target, Operand::Reg(1), name);
+    Emit(addop, Operand::Reg(0), Operand::Reg(1));
+    Emit("MOVB", Operand::Reg(1), target);
     return true;
 }
 

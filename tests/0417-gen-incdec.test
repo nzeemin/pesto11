@@ -1,0 +1,81 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program IncDec;
+var I, J: Integer; B: Byte; C: Char; A: array[1..5] of Integer; BA: array[1..5] of Byte; P: ^Integer;
+function F: Integer;
+begin
+  F := 1
+end;
+begin
+  Inc(I); Dec(I); Inc(I, 5); Dec(I, 5); Inc(I, -1); Inc(I, 0);
+  Inc(I, J); Dec(I, J + 1); Inc(I, F);
+  Inc(B); Dec(C); Inc(B, 3); Dec(B, J);
+  Inc(A[J]); Inc(A[J + 1], 2); Dec(BA[J], 4); Inc(P^); Inc(P^, J)
+end.
+=== MAC EXPECTED ======================================================
+	.TITLE	TEST
+START::
+	MOV	SP, INIT$S
+	MOV	#-2, R0
+	EMT	354
+	BIC	#1, R0
+	MOV	R0, SP
+	INC	V00001
+	DEC	V00001
+	ADD	#5., V00001
+	SUB	#5., V00001
+	DEC	V00001
+	ADD	V00002, V00001
+	MOV	V00002, R0
+	INC	R0
+	SUB	R0, V00001
+	CALL	P00001
+	ADD	R0, V00001
+	INCB	V00003
+	DECB	V00004
+	CLR	R1
+	BISB	V00003, R1
+	ADD	#3., R1
+	MOVB	R1, V00003
+	MOV	V00002, R0
+	CLR	R1
+	BISB	V00003, R1
+	SUB	R0, R1
+	MOVB	R1, V00003
+	MOV	V00002, R3
+	ASL	R3
+	INC	V00005-2.(R3)
+	MOV	V00002, R0
+	INC	R0
+	MOV	R0, R3
+	ASL	R3
+	ADD	#2., V00005-2.(R3)
+	MOV	V00002, R3
+	CLR	R1
+	BISB	V00006-1.(R3), R1
+	SUB	#4., R1
+	MOVB	R1, V00006-1.(R3)
+	INC	@V00007
+	ADD	V00002, @V00007
+HALT::
+INIT$S = . + 2
+	MOV	#776, SP
+	EMT	350
+P00001:
+	MOV	R5, -(SP)
+	MOV	SP, R5
+	TST	-(SP)
+	MOV	#1., -2.(R5)
+	MOV	-2.(R5), R0
+	MOV	R5, SP
+	MOV	(SP)+, R5
+	RETURN
+V00001:	.BLKW	1.
+V00002:	.BLKW	1.
+V00003:	.BLKW	1.
+V00004:	.BLKW	1.
+V00005:	.BLKW	5.
+V00006:	.BLKW	3.
+V00007:	.BLKW	1.
+PEND::
+	.END	START

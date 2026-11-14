@@ -99,6 +99,8 @@ const StdRoutineSpec Validator::m_stdroutines[] =
     STDFUNC("KeyPressed", "", 'B'),
     // Miscellaneous
     STDPROC("Delay", "i"),
+    STDPROC("Inc", "O[i"),          // [P11] from TP4
+    STDPROC("Dec", "O[i"),          // [P11] from TP4
     STDPROC("Randomize", ""),
     STDPROC("Halt", ""),
     STDPROC("Exit", ""),
@@ -221,7 +223,7 @@ int Validator::CheckStdPattern(ExpressionModel& expr, int index, const StdRoutin
 bool Validator::CheckStdArg(ExpressionModel& expr, const ArgModel& arg, char code)
 {
     int node = arg.node;
-    bool isvarcode = (code == 'S' || code == 'L' || code == 'V' || code == 'P' || code == 'F' || code == 'T');
+    bool isvarcode = (code == 'S' || code == 'L' || code == 'V' || code == 'P' || code == 'F' || code == 'T' || code == 'O');
     int type = isvarcode ? ValidateNode(expr, node) : ValidateValue(expr, node);
     if (type == g_typeError)
         return false;
@@ -282,6 +284,10 @@ bool Validator::CheckStdArg(ExpressionModel& expr, const ArgModel& arg, char cod
         return false;
     case 'V':
         return true;
+    case 'O':
+        if (IsOrdinal(type)) return true;
+        Error(pos, 30, "Simple type expected: a variable of an ordinal type");
+        return false;
     case 'P':
         if (IsPointerType(type)) return true;
         Error(pos, 28, "Pointer variable expected");

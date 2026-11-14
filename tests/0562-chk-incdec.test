@@ -1,0 +1,93 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+type Color = (Red, Green, Blue, White);
+  Rec = record N: Integer; B: Byte end;
+var I, J, Calls: Integer; B: Byte; C: Char; E: Color; F: Boolean;
+  A: array[1..5] of Integer; BA: array[1..5] of Byte; R: Rec; P: ^Integer; PB: ^Byte;
+function Next: Integer;
+begin
+  Calls := Calls + 1; J := 100; Next := 2
+end;
+function Idx: Integer;
+begin
+  Calls := Calls + 1; Idx := 3
+end;
+procedure VarParam(var V: Integer; var W: Byte);
+begin
+  Inc(V); Inc(V, 10); Dec(W, 2)
+end;
+procedure Outer(var Res: Integer);
+var L: Integer; LB: Byte;
+  procedure Inner;
+  begin
+    Inc(L, 5); Dec(L); Inc(LB, 3)
+  end;
+begin
+  L := 1; LB := 254; Inner; Res := L * 1000 + LB
+end;
+procedure Shadow(var Res: Integer);
+  procedure Inc(var V: Integer);
+  begin
+    V := V * 2
+  end;
+begin
+  Res := 5; Inc(Res)
+end;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('WORD');
+  I := 5; Inc(I); Check(I = 6, 1); Dec(I); Check(I = 5, 2);
+  Inc(I, 10); Check(I = 15, 3); Dec(I, 20); Check(I = -5, 4);
+  Inc(I, -1); Check(I = -6, 5); Dec(I, -6); Check(I = 0, 6); Inc(I, 0); Check(I = 0, 7);
+  J := 7; Inc(I, J); Check(I = 7, 8); Dec(I, J * 2); Check(I = -7, 9);
+  I := 32767; Inc(I); Check(I = -32768, 10); Dec(I); Check(I = 32767, 11);
+  Group('BYTE');
+  B := 254; Inc(B); Check(B = 255, 1); Inc(B); Check(B = 0, 2); Dec(B); Check(B = 255, 3);
+  B := 10; Inc(B, 5); Check(B = 15, 4); Dec(B, 20); Check(B = 251, 5); J := 3; Inc(B, J); Check(B = 254, 6);
+  C := 'a'; Inc(C); Check(C = 'b', 7); Inc(C, 2); Check(C = 'd', 8); Dec(C, 3); Check(C = 'a', 9);
+  E := Red; Inc(E); Check(E = Green, 10); Inc(E, 2); Check(E = White, 11); Dec(E); Check(E = Blue, 12);
+  F := False; Inc(F); Check(F, 13); Dec(F); Check(not F, 14);
+  Group('PLACES');
+  for I := 1 to 5 do begin A[I] := I; BA[I] := I end;
+  I := 2; Inc(A[I + 1], 10); Check(A[3] = 13, 1); Dec(BA[I * 2], 2); Check(BA[4] = 2, 2);
+  Calls := 0; Inc(A[Idx], 5); Check((A[3] = 18) and (Calls = 1), 3);
+  Calls := 0; I := 1; Inc(A[I], Next); Check((A[1] = 3) and (Calls = 1) and (J = 100), 4);
+  R.N := 1; R.B := 7; Inc(R.N, 4); Inc(R.B); Check((R.N = 5) and (R.B = 8), 5);
+  New(P); P^ := 9; Inc(P^); Check(P^ = 10, 6); New(PB); PB^ := 1; Dec(PB^, 2); Check(PB^ = 255, 7);
+  I := 1; B := 10; VarParam(I, B); Check((I = 12) and (B = 8), 8);
+  Outer(J); Check(J = 5001, 9);
+  Shadow(J); Check(J = 10, 10); Inc(J); Check(J = 11, 11);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+WORD         PASS  11
+BYTE         PASS  14
+PLACES       PASS  11
+TOTAL PASS 36 FAIL 0
