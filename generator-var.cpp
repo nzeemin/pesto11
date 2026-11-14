@@ -336,6 +336,33 @@ bool Generator::IsSimpleDesignator(const ExpressionModel& expr, int index)
     }
 }
 
+// The designator code does not touch R3: its indexes are computed in R0..R2 (see IsRegisterSafeIndex)
+bool Generator::DesignatorAvoidsR3(const ExpressionModel& expr, int index)
+{
+    Operand operand;
+    if (GetVariableOperand(expr, index, operand))
+        return true;
+    const ExpressionNode& node = expr.nodes[index];
+    switch (node.kind)
+    {
+    case NodeField:
+        return DesignatorAvoidsR3(expr, node.left);
+    case NodeIndex:
+        if (IsMemArray(expr, node.left) || !DesignatorAvoidsR3(expr, node.left))
+            return false;
+        for (const ArgModel& arg : node.args)
+        {
+            if (!expr.nodes[arg.node].isconst && !IsRegisterSafeIndex(expr, arg.node))
+                return false;
+        }
+        return true;
+    case NodeDeref:
+        return Validator::IsPointerType(expr.nodes[node.left].type) && GetVariableOperand(expr, node.left, operand);
+    default:
+        return false;
+    }
+}
+
 // The index expression is computed in R0..R2 only: constants, simple variables and arithmetic on them.
 // Then the base address can stay in R3 meanwhile.
 bool Generator::IsRegisterSafeIndex(const ExpressionModel& expr, int index)

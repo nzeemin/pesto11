@@ -100,6 +100,22 @@ begin
   Group('MUL CONST');
   I := 3; Check(2 * I = 6, 1); Check(4 * I + 1 = 13, 2); Check(1024 * I = 3072, 3);
   I := -5; Check(8 * I = -40, 4); Check(3 * I = -15, 5);
+  Group('ELEM CMP');
+  for I := 1 to 10 do A[I] := I * 10; S[1] := 'm'; C := 'k'; B := 200;
+  I := 3; J := 30; Check(A[I] = J, 1); Check(not (A[I] < J), 2); Check(J <= A[I + 1], 3);
+  Check(A[I] > 25, 4); Check(25 < A[I], 5); Check(A[I] <> 31, 6);
+  I := 1; Check(S[I] > C, 7); Check(C < S[I], 8); Check(S[I] = 'm', 9); Check(S[I] < #200, 10);
+  K := -5; A[2] := -7; I := 2; Check(A[I] < K, 11); Check(K > A[I], 12);
+  Group('DIV CONST');
+  I := 17; Check((I div 2 = 8) and (I mod 2 = 1), 1); I := -17; Check((I div 2 = -8) and (I mod 2 = -1), 2);
+  I := 100; Check((I div 7 = 14) and (I mod 7 = 2), 3); I := -100; Check(I div -7 = 14, 4);
+  Group('TWO ELEMS');
+  for I := 1 to 10 do A[I] := I * 10; for I := 1 to 6 do S[I] := Chr(96 + I);
+  I := 2; J := 3; Check(A[I] < A[J], 1); Check(not (A[I + 1] < A[J]), 2); Check(A[J * 2] > A[I], 3);
+  Check(S[I] < S[J], 4); Check(S[I + 1] = S[J], 5); A[1] := -50; Check(A[1] < A[I], 6);
+  S[1] := #200; Check(S[1] > S[J], 7); B := 2; Check(S[B + 1] = S[J], 8);
+  K := 0; for I := A[I] div 10 to A[J] div 10 do K := K + 1; Check(K = 2, 9);
+  I := 3; K := 0; for J := 1 to A[I] do K := K + 1; Check(K = 30, 10);
   Done;
   WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
 end.
@@ -112,4 +128,7 @@ INDEXES      PASS   4
 COPY         PASS   4
 REAL         PASS   8
 MUL CONST    PASS   5
-TOTAL PASS 49 FAIL 0
+ELEM CMP     PASS  12
+DIV CONST    PASS   4
+TWO ELEMS    PASS  10
+TOTAL PASS 75 FAIL 0

@@ -1122,6 +1122,7 @@ private:
     void ScaleRegister(int reg, int size);
     bool IsRegisterSafeIndex(const ExpressionModel& expr, int index);
     bool IsSimpleDesignator(const ExpressionModel& expr, int index);
+    bool DesignatorAvoidsR3(const ExpressionModel& expr, int index);
     bool GetStaticOperand(const ExpressionModel& expr, int index, Operand& operand);
     void LoadAddress(const Operand& operand, int reg);
     void PushAddress(const Operand& operand, const string& comment);

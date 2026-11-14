@@ -394,6 +394,13 @@ bool Generator::GenerateFor(StatementModel& statement)
         bool finalbyte;
         if (GetSimpleOperand(statement.expr2, statement.expr2.root, finalop, finalbyte) && !finalbyte)
             Emit("MOV", finalop, limit, "final value");
+        else if (IsDesignator(statement.expr2, statement.expr2.root) &&
+                 Validator::TypeSize(finalnode.type) == 2 && finalnode.convert == ConvertNone)
+        {
+            if (!GenerateDesignator(statement.expr2, statement.expr2.root, 3, finalop))
+                return false;
+            Emit("MOV", finalop, limit, "final value");
+        }
         else
         {
             if (!GenerateValue(statement.expr2, statement.expr2.root))

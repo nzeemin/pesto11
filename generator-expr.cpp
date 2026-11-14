@@ -275,10 +275,14 @@ bool Generator::GenerateBinaryValue(const ExpressionModel& expr, int index)
         Emit("MOV", Operand::Reg(0), Operand::Reg(1));
         Emit("SXT", Operand::Reg(0), Operand(), "R0:R1 = dividend");
         Emit("DIV", right, Operand::Reg(0));
-        string ok = NewLabel();
-        EmitBranch("BVC", ok);
-        EmitCall("DIVZER", "division by zero, error 02");
-        EmitLabel(ok);
+        if (right.mode != OpImmediate || right.value == 0)
+        {
+            // A nonzero constant divisor needs no check
+            string ok = NewLabel();
+            EmitBranch("BVC", ok);
+            EmitCall("DIVZER", "division by zero, error 02");
+            EmitLabel(ok);
+        }
         if (op.IsKeyword(KeywordMOD))
             Emit("MOV", Operand::Reg(1), Operand::Reg(0), "remainder");
         return true;
@@ -648,6 +652,51 @@ bool Generator::GenerateCompare(const ExpressionModel& expr, int index, const st
             else
                 Emit("CMP", leftop, rightop);
             EmitBranch(GetCompareBranch(node.token, false, jumpiftrue), label);
+            return true;
+        }
+    }
+
+    // Two elements or fields of the same size: the right address in R3, the left one in R2, one CMP
+    if (!leftsimple && !rightsimple && IsDesignator(expr, node.left) && IsDesignator(expr, node.right) &&
+        Validator::IsScalar(left.type) && Validator::IsScalar(right.type) &&
+        left.convert == ConvertNone && right.convert == ConvertNone &&
+        Validator::TypeSize(left.type) == Validator::TypeSize(right.type) && DesignatorAvoidsR3(expr, node.left))
+    {
+        bool bytes = (Validator::TypeSize(left.type) == 1);
+        Operand rightdesig, leftdesig2;
+        if (!GenerateDesignator(expr, node.right, 3, rightdesig))
+            return false;
+        if (!GenerateDesignator(expr, node.left, 2, leftdesig2))
+            return false;
+        Emit(bytes ? "CMPB" : "CMP", leftdesig2, rightdesig);
+        EmitBranch(GetCompareBranch(node.token, bytes, jumpiftrue), label);
+        return true;
+    }
+
+    // An element or a field against a simple operand: compared where it is, the address in R3
+    bool leftdesig = !leftsimple && rightsimple && IsDesignator(expr, node.left);
+    bool rightdesig = leftsimple && !rightsimple && IsDesignator(expr, node.right);
+    if (leftdesig || rightdesig)
+    {
+        int desig = leftdesig ? node.left : node.right;
+        const ExpressionNode& designode = expr.nodes[desig];
+        bool desigbyte = (Validator::TypeSize(designode.type) == 1);
+        const Operand& simpleop = leftdesig ? rightop : leftop;
+        bool simplebyte = leftdesig ? rightbyte : leftbyte;
+        bool simpleconst = leftdesig ? right.isconst : left.isconst;
+        bool constbyte = simpleconst && simpleop.value >= 0 && simpleop.value <= 255;
+        bool bytes = desigbyte && (simplebyte || constbyte);
+        bool words = !desigbyte && !simplebyte;
+        if ((bytes || words) && Validator::IsScalar(designode.type) && designode.convert == ConvertNone)
+        {
+            Operand desigop;
+            if (!GenerateDesignator(expr, desig, 3, desigop))
+                return false;
+            if (leftdesig)
+                Emit(bytes ? "CMPB" : "CMP", desigop, simpleop);
+            else
+                Emit(bytes ? "CMPB" : "CMP", simpleop, desigop);
+            EmitBranch(GetCompareBranch(node.token, bytes, jumpiftrue), label);
             return true;
         }
     }

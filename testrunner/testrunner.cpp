@@ -139,21 +139,23 @@ struct TestCase
 {
     string options;                     // Compiler command line options: header OPTIONS = ...
     int frames;                         // Emulator run time in frames: header FRAMES = ..., default EMULATOR_RUN_FRAMES
+    int keyswait;                       // Frames before the keys are typed: header KEYS WAIT = ..., default 60
     std::vector<string> source;         // Pascal source lines: section SOURCE
     std::vector<std::pair<string, std::vector<string>>> extrafiles;  // Sections SOURCE NAME.EXT: name and lines
+    std::vector<std::pair<string, std::vector<string>>> datafiles;   // Sections DATA NAME.EXT: files for the RT-11 disk
     std::vector<string> expected;       // Expected compiler output lines, non-empty: section OUTPUT
     std::vector<string> etalon;         // Reference .MAC lines, stripped: section MAC EXPECTED
     bool hasscreen;                     // Section SCREEN EXPECTED is present: run in the emulator
     std::vector<string> screen;         // Expected program output on the screen
     std::vector<string> keys;           // Keyboard input for the run: section KEYS INPUT
 public:
-    TestCase() : frames(EMULATOR_RUN_FRAMES), hasscreen(false) {}
+    TestCase() : frames(EMULATOR_RUN_FRAMES), keyswait(60), hasscreen(false) {}
 };
 
 // Test file format: a header of "KEY = VALUE" lines, then named sections. A section starts
 // with a line "=== NAME"; the rest of the line after the name (spaces and '=') is ignored.
-// Sections: SOURCE, SOURCE NAME.EXT (an extra file, like an include file), OUTPUT,
-// MAC EXPECTED, KEYS INPUT, SCREEN EXPECTED. Returns an error message, empty if fine.
+// Sections: SOURCE, SOURCE NAME.EXT (an extra file, like an include file), DATA NAME.EXT (a text file
+// put on the RT-11 disk for the run, CR LF line ends), OUTPUT, MAC EXPECTED, KEYS INPUT, SCREEN EXPECTED. Returns an error message, empty if fine.
 static string get_section_name(const string& line)
 {
     string name = line.substr(4);
@@ -177,7 +179,7 @@ static string parse_test_file(const fs::path& path, TestCase& test)
     if (!file)
         return "cannot read the test file";
 
-    enum { InHeader, InSource, InExtra, InOutput, InMac, InKeys, InScreen } section = InHeader;
+    enum { InHeader, InSource, InExtra, InData, InOutput, InMac, InKeys, InScreen } section = InHeader;
     std::set<string> seen;
     bool hassource = false;
     string line;
@@ -190,6 +192,12 @@ static string parse_test_file(const fs::path& path, TestCase& test)
             {
                 test.extrafiles.push_back(std::make_pair(name.substr(7), std::vector<string>()));
                 section = InExtra;
+                continue;
+            }
+            if (name.compare(0, 5, "DATA ") == 0)
+            {
+                test.datafiles.push_back(std::make_pair(name.substr(5), std::vector<string>()));
+                section = InData;
                 continue;
             }
             if (!seen.insert(name).second)
@@ -227,6 +235,12 @@ static string parse_test_file(const fs::path& path, TestCase& test)
                 string value = trim(line.substr(equal + 1));
                 if (key == "OPTIONS")
                     test.options = value;
+                else if (key == "KEYS WAIT")
+                {
+                    test.keyswait = atoi(value.c_str());
+                    if (test.keyswait <= 0)
+                        return "bad KEYS WAIT value: " + value;
+                }
                 else if (key == "FRAMES")
                 {
                     test.frames = atoi(value.c_str());
@@ -242,6 +256,9 @@ static string parse_test_file(const fs::path& path, TestCase& test)
             break;
         case InExtra:
             test.extrafiles.back().second.push_back(line);
+            break;
+        case InData:
+            test.datafiles.back().second.push_back(line);
             break;
         case InOutput:
             if (!line.empty())
@@ -358,7 +375,8 @@ static string keys_to_script(const std::vector<string>& keys)
     return script;
 }
 
-static bool run_in_emulator(const fs::path& testdir, const std::vector<string>& keys, int frames, std::vector<string>& output, string& error)
+static bool run_in_emulator(const fs::path& testdir, const std::vector<string>& keys, int keyswait,
+        const std::vector<string>& datanames, int frames, std::vector<string>& output, string& error)
 {
     fs::path debuggerdir = g_debuggerpath.parent_path();
     std::error_code ec;
@@ -372,13 +390,18 @@ static bool run_in_emulator(const fs::path& testdir, const std::vector<string>& 
     }
     run_command(testdir, g_rt11dskpath, string("d ") + DISK_FILE_NAME + " 1.SAV", "TEST.outdsk");
     run_command(testdir, g_rt11dskpath, string("a ") + DISK_FILE_NAME + " 1.SAV", "TEST.outdsk");
+    for (const string& name : datanames)
+    {
+        run_command(testdir, g_rt11dskpath, string("d ") + DISK_FILE_NAME + " " + name, "TEST.outdsk");
+        run_command(testdir, g_rt11dskpath, string("a ") + DISK_FILE_NAME + " " + name, "TEST.outdsk");
+    }
 
     {
         std::ofstream script(testdir / "TEST.script", std::ios::out | std::ios::binary);
         script << "disk1 attach " << DISK_FILE_NAME << "\n"
                << "reset\n" << "cf200\n" << "k 1\n" << "cf50\n" << "k ENTER\n";
         if (!keys.empty())  // RT-11 keeps the keys typed ahead until the program reads them
-            script << "cf60\n" << keys_to_script(keys);
+            script << "cf" << keyswait << "\n" << keys_to_script(keys);
         script << "cf" << frames << "\n" << "screentext\n" << "q\n";
     }
     run_command(testdir, g_debuggerpath, "<TEST.script", "TEST.screen");
@@ -512,6 +535,17 @@ static void process_test(const string& testname, const fs::path& testfilepath)
     write_lines(testdir / SOURCE_FILE_NAME, test.source);
     for (const auto& extrafile : test.extrafiles)
         write_lines(testdir / extrafile.first, extrafile.second);
+    std::vector<string> datanames;
+    for (const auto& datafile : test.datafiles)
+    {
+        std::ofstream ofs(testdir / datafile.first, std::ios::out | std::ios::binary);
+        for (const string& line : datafile.second)
+        {
+            ofs.write(line.data(), line.size());
+            ofs.write("\r\n", 2);
+        }
+        datanames.push_back(datafile.first);
+    }
 
     // Run the compiler
     run_command(testdir, g_compilerpath, test.options + " " + SOURCE_FILE_NAME, "TEST.out");
@@ -628,7 +662,7 @@ static void process_test(const string& testname, const fs::path& testfilepath)
         {
             std::vector<string> output;
             string error;
-            if (!run_in_emulator(testdir, test.keys, test.frames, output, error))
+            if (!run_in_emulator(testdir, test.keys, test.keyswait, datanames, test.frames, output, error))
             {
                 test_failed(error);
                 return;

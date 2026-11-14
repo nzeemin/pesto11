@@ -3,7 +3,7 @@
 # Usage: python tools/codesize.py [OMSI_DIR]
 #   OMSI_DIR - folder with the uknc-various repository (KINGOM-PASCAL, STALK-PASCAL with the OMSI .MAC files);
 #              without it only the Pesto/11 numbers are printed.
-#   Examples written for both compilers (leibniz, sieve) are compiled by OMSI Pascal on the spot: PASCAL.SAV from
+#   Examples written for both compilers (leibniz, sieve, qsort, lz77, tpk; the file opening line is replaced by the OMSI form) are compiled by OMSI Pascal on the spot: PASCAL.SAV from
 #   OMSI_DIR/KINGOM-PASCAL under the RT-11 emulator rt11.exe (environment variable RT11EXE,
 #   default C:/bin/rt11/rt11.exe). Without it these examples are skipped in the comparison.
 #
@@ -77,12 +77,20 @@ def ours(path):
 
 RT11EXE = os.environ.get('RT11EXE', r'C:/bin/rt11/rt11.exe')
 
+# Lines that differ between Turbo Pascal 3.0 and OMSI Pascal: opening a text file
+OMSI_PATCHES = [
+    ("ASSIGN(F, 'LZDATA.TXT'); RESET(F); V := 1;", "RESET(F, 'LZDATA', 'TXT', V);"),
+]
+
 def omsi_compile(src, omsidir, work):
     """MAC of the source by OMSI Pascal; None if the compiler cannot be run"""
     pascal = os.path.join(omsidir, 'KINGOM-PASCAL', 'PASCAL.SAV')
     if not os.path.exists(RT11EXE) or not os.path.exists(pascal):
         return None
-    shutil.copy(src, work)
+    text = open(src, 'rb').read().decode('koi8-r')
+    for old, new in OMSI_PATCHES:
+        text = text.replace(old, new)
+    open(os.path.join(work, os.path.basename(src)), 'wb').write(text.encode('koi8-r'))
     shutil.copy(pascal, work)
     name = os.path.splitext(os.path.basename(src))[0]
     subprocess.run([RT11EXE, 'RU', 'PASCAL', '%s,%s=%s.PAS' % (name, name, name)], cwd=work, capture_output=True)
@@ -107,6 +115,9 @@ programs = [
     ('stalker', os.path.join(ROOT, 'examples', 'stalker', 'STALK.PAS'), ['STALK-PASCAL/STALK1.MAC']),
     ('leibniz', os.path.join(ROOT, 'examples', 'leibniz', 'LEIBNZ.PAS'), None),  # Compiled by OMSI here
     ('sieve', os.path.join(ROOT, 'examples', 'sieve', 'SIEVE.PAS'), None),
+    ('qsort', os.path.join(ROOT, 'examples', 'qsort', 'QSORT.PAS'), None),
+    ('lz77', os.path.join(ROOT, 'examples', 'lz77', 'LZ77.PAS'), None),
+    ('tpk', os.path.join(ROOT, 'examples', 'tpk', 'TPK.PAS'), None),
 ]
 omsidir = sys.argv[1] if len(sys.argv) > 1 else None
 sumours = sumomsi = 0

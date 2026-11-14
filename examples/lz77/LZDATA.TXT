@@ -1,0 +1,37 @@
+The PDP-11 is a family of 16-bit computers. The PDP-11 has eight
+registers, R0 to R7. R6 is the stack pointer SP, R7 is the program
+counter PC. Every register can be used for addressing: the register
+itself, the word the register points to, the word the register points
+to with an increment after it, the word the register points to with a
+decrement before it, and the word at an offset from the register.
+The same modes work with the program counter, so an instruction can
+take an immediate value, an absolute address or a relative address.
+
+The UKNC is a Soviet computer for schools with two PDP-11 processors.
+The central processor runs the programs, the peripheral processor runs
+the screen, the keyboard and the sound. The BK-0010 is a home computer
+with one PDP-11 processor and without the floating point instructions.
+Both computers run programs written in Pascal, in Basic and in the
+assembler language MACRO-11.
+
+Pascal was designed by Niklaus Wirth. A Pascal program has a heading,
+declarations and statements. The declarations give names to labels,
+constants, types, variables, procedures and functions. The statements
+are assignments, procedure calls, compound statements, if statements,
+case statements, while statements, repeat statements, for statements,
+with statements and goto statements. A procedure has a heading,
+declarations and statements too, so procedures can be nested.
+
+Turbo Pascal 3.0 compiles a program in memory in a few seconds. Its
+strings have a length byte and up to 255 characters. Its sets have up
+to 256 elements. Its real numbers take six bytes. Pesto/11 compiles a
+Turbo Pascal 3.0 program to the assembler language MACRO-11, and the
+real numbers take four bytes, as the floating point instructions of the
+PDP-11 want them.
+
+LZ77 was published by Abraham Lempel and Jacob Ziv in 1977. The method
+looks for the longest match of the text ahead in the text behind, in a
+window of the last bytes. A match is written as an offset back and a
+length, then the next byte follows. A text that repeats itself, like a
+text about the PDP-11, the UKNC and Pascal, packs well: the same words
+and the same phrases come again and again, and again and again.
