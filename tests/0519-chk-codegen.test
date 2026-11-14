@@ -1,0 +1,113 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+type Rec = record N, M: Integer end;
+var I, J, K, N: Integer; B, B2: Byte; C: Char; Bool: Boolean; S: string[20];
+  A: array[1..5] of Integer; R: Rec;
+function SetI(V: Integer): Integer;
+begin
+  I := 100; SetI := V
+end;
+function Twice(V: Integer): Integer;
+begin
+  Twice := V * 2
+end;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('FOLD');
+  Check(Hi($1234) = $12, 1); Check(Lo($1234) = $34, 2); Check(Swap($1234) = $3412, 3);
+  Check(Odd(3) and not Odd(4), 4); Check(UpCase('a') = 'A', 5); Check(UpCase('1') = '1', 6);
+  Check(Length('abc') = 3, 7); Check(Hi(-1) = 255, 8); Check(Swap(-256) = 255, 9);
+  Group('SHIFTS');
+  I := -1;
+  Check(I shl 1 = -2, 1); Check(I shl 8 = -256, 2); Check(I shl 9 = -512, 3); Check(I shl 15 = -32768, 4);
+  Check(I shr 1 = 32767, 5); Check(I shr 8 = 255, 6); Check(I shr 9 = 127, 7); Check(I shr 15 = 1, 8);
+  Check(I shr 2 = 16383, 9); Check(I shr 10 = 63, 10);
+  J := $1234; Check(J shl 4 = $2340, 11); Check(J shr 4 = $123, 12);
+  Check(J * 2 = $2468, 13); Check(J * 16 = $2340, 14); I := -3; Check(I * 4 = -12, 15);
+  Check(I * 1024 = -3072, 16);
+  Group('BOOLEAN');
+  I := 3; J := 5;
+  Bool := I < J; Check(Bool, 1);
+  Bool := I > J; Check(not Bool, 2);
+  Bool := (I = 3) and (J = 5); Check(Bool, 3);
+  Bool := (I = 4) or (J = 6); Check(not Bool, 4);
+  Bool := I in [1..4]; Check(Bool, 5);
+  B := 7; Bool := B = 7; Check(Bool, 6);
+  Group('OPERANDS');
+  S := 'abcd'; I := 13;
+  Check(I - Length(S) = 9, 1);
+  Check(20 - Length(S) = 16, 2);
+  I := 10; J := 3; Check(I * 2 - J * 3 = 11, 3);
+  Check((I + 1) and (J + 2) = 1, 4);
+  Check((I + 1) xor (J + 2) = 14, 5);
+  Check((I + 1) or (J + 2) = 15, 6);
+  Check(I - Twice(J) = 4, 7);
+  I := 10; K := I - SetI(1); Check((K = 9) and (I = 100), 8);
+  I := 10; K := I + SetI(1); Check(K = 11, 9);
+  I := 2; Check(I < Twice(J), 10); Check(not (I > Twice(J)), 11);
+  B := 200; Check(B - Twice(J) = 194, 12); Check(B + Twice(J) = 206, 13);
+  Check(5 * Twice(J) = 30, 14); Check(Twice(J) * Twice(I) = 24, 15);
+  Group('FOR');
+  K := 0; for I := 1 to 10 do K := K + I; Check((K = 55) and (I = 10), 1);
+  K := 0; for I := 10 downto 1 do K := K + 1; Check((K = 10) and (I = 1), 2);
+  K := 0; for I := 5 to 4 do K := K + 1; Check(K = 0, 3);
+  K := 0; for I := 4 downto 5 do K := K + 1; Check(K = 0, 4);
+  K := 0; for B := 0 to 255 do K := K + 1; Check((K = 256) and (B = 255), 5);
+  K := 0; for B := 255 downto 0 do K := K + 1; Check((K = 256) and (B = 0), 6);
+  K := 0; for C := 'a' to 'z' do K := K + 1; Check((K = 26) and (C = 'z'), 7);
+  K := 0; for I := -3 to 3 do K := K + I; Check(K = 0, 8);
+  N := 5; K := 0; for I := 1 to N do begin N := 2; K := K + 1 end; Check(K = 5, 9);
+  J := 3; N := 6; K := 0; for I := J to N do K := K + 1; Check(K = 4, 10);
+  J := 7; K := 0; for I := J to N do K := K + 1; Check(K = 0, 11);
+  B2 := 3; K := 0; for I := B2 to 5 do K := K + 1; Check(K = 3, 12);
+  K := 0; for B := B2 to 4 do K := K + 1; Check(K = 2, 13);
+  K := 0; for I := 1 to 1 do K := K + 1; Check(K = 1, 14);
+  K := 0; for I := 32766 to 32767 do K := K + 1; Check((K = 2) and (I = 32767), 15);
+  Group('INPLACE');
+  I := 5; J := 7;
+  I := I + J; Check(I = 12, 1); I := J + I; Check(I = 19, 2);
+  I := I - 4; Check(I = 15, 3); I := I + 1; Check(I = 16, 4); I := I - 1; Check(I = 15, 5);
+  I := I + (-1); Check(I = 14, 6); I := I + 0; Check(I = 14, 7);
+  I := I and $FC; Check(I = 12, 8); I := I or J; Check(I = 15, 9); I := I or 16; Check(I = 31, 10);
+  B := 254; B := B + 1; Check(B = 255, 11); B := B - 1; Check(B = 254, 12);
+  B := B and $0F; Check(B = 14, 13); B := B or $30; Check(B = $3E, 14);
+  A[2] := 10; A[2] := A[2] + 5; Check(A[2] = 15, 15);
+  R.M := 3; R.M := R.M + R.M; Check(R.M = 6, 16);
+  I := 3; I := 10 - I; Check(I = 7, 17);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+FOLD         PASS   9
+SHIFTS       PASS  16
+BOOLEAN      PASS   6
+OPERANDS     PASS  15
+FOR          PASS  15
+INPLACE      PASS  17
+TOTAL PASS 78 FAIL 0

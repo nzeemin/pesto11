@@ -138,7 +138,47 @@ int Validator::ValidateStdCall(ExpressionModel& expr, int index, int symbol)
         CheckNoFormat(expr, index);
     if (spec.method != nullptr)
         return (this->*spec.method)(expr, index, spec);
-    return CheckStdPattern(expr, index, spec);
+    int type = CheckStdPattern(expr, index, spec);
+    FoldStdFunction(expr, index, spec);
+    return type;
+}
+
+// Standard functions of constants become constants: Hi, Lo, Swap, Odd, UpCase, Length
+void Validator::FoldStdFunction(ExpressionModel& expr, int index, const StdRoutineSpec& spec)
+{
+    ExpressionNode& node = expr.nodes[index];
+    if (node.args.size() != 1)
+        return;
+    const ExpressionNode& arg = expr.nodes[node.args[0].node];
+    if (!arg.isconst)
+        return;
+    string name = spec.name;
+    int64_t word = arg.constvalue.ivalue & 0xFFFF;
+    int64_t value;
+    if (name == "Hi")
+        value = (word >> 8) & 0xFF;
+    else if (name == "Lo")
+        value = word & 0xFF;
+    else if (name == "Swap")
+        value = (int16_t)(((word >> 8) & 0xFF) | ((word & 0xFF) << 8));
+    else if (name == "Odd")
+        value = word & 1;
+    else if (name == "UpCase" && IsCharType(arg.type))
+    {
+        value = arg.constvalue.ivalue & 0xFF;
+        if (value >= 128)
+            return;  // KOI8-R letters: the runtime decides
+        if (value >= 'a' && value <= 'z')
+            value -= 'a' - 'A';
+    }
+    else if (name == "Length" && IsStringType(arg.type))
+        value = (int64_t)arg.constvalue.svalue.size();
+    else if (name == "Length" && IsCharType(arg.type))
+        value = 1;
+    else
+        return;
+    node.isconst = true;
+    node.constvalue.ivalue = value;
 }
 
 int Validator::StdResultType(char code, ExpressionModel& expr, int index)

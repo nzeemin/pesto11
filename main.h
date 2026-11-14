@@ -904,6 +904,7 @@ private:
     int  CheckStdRandom(ExpressionModel& expr, int index, const StdRoutineSpec& spec);
     int  CheckStdFileFunc(ExpressionModel& expr, int index, const StdRoutineSpec& spec);
     int  CheckStdChr(ExpressionModel& expr, int index, const StdRoutineSpec& spec);
+    void FoldStdFunction(ExpressionModel& expr, int index, const StdRoutineSpec& spec);
     // Statements, validator.cpp
     void ValidateStatement(StatementModel& statement);
     void ValidateStatements(std::vector<StatementModel>& statements);
@@ -1004,6 +1005,8 @@ struct FinalModel
 extern std::vector<std::vector<string>> g_sourcelines;  // Source lines by file index, for comments
 
 string FormatNumber(int64_t value);     // Decimal number for macro11: "12." or "-4."
+struct ExpressionNode;
+int64_t ConstOrdinalValue(const ExpressionNode& node);  // Constant as a 16-bit value, bytes as 0..255
 string LabelWithOffset(const string& label, int64_t value);  // label, label+n or label-n
 bool   FormatAsmOperand(const Operand& base, const AsmNameModel& name, string& result, string& error);
 bool RealToDecF(double value, uint16_t& high, uint16_t& low);  // DEC F_floating words, see codeline.cpp
@@ -1100,6 +1103,7 @@ private:
     bool GenerateFor(StatementModel& statement);
     bool GenerateCase(StatementModel& statement);
     bool GenerateGoto(StatementModel& statement);
+    bool GenerateAssignInPlace(StatementModel& statement);
     bool GenerateAsm(StatementModel& statement);
     bool GenerateWith(StatementModel& statement);
     bool GenerateStructAssign(StatementModel& statement);
@@ -1127,6 +1131,10 @@ private:
     bool GenerateUnaryValue(const ExpressionModel& expr, int index);
     bool GenerateBinaryValue(const ExpressionModel& expr, int index);
     bool GenerateBooleanValue(const ExpressionModel& expr, int index);
+    void EmitShiftConst(bool isshl, int n);
+    bool LinesUseR0(size_t start) const;
+    enum OperandsOrder { OperandsNormal, OperandsSwapped, OperandsStacked };
+    bool GenerateOperands(const ExpressionModel& expr, int left, int right, Operand& other, OperandsOrder& order);
     bool GenerateCondition(const ExpressionModel& expr, int index, const string& label, bool jumpiftrue);
     bool GenerateCompare(const ExpressionModel& expr, int index, const string& label, bool jumpiftrue);
     bool GenerateInConst(const ExpressionModel& expr, int index, const string& label, bool jumpiftrue);

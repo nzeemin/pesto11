@@ -16,7 +16,7 @@ static bool IsByteSized(int type)
     return Validator::TypeSize(type) == 1;
 }
 
-static int64_t ConstOrdinal(const ExpressionNode& node)
+int64_t ConstOrdinalValue(const ExpressionNode& node)
 {
     int64_t value = node.constvalue.ivalue;
     if (IsByteSized(node.type))
@@ -31,7 +31,7 @@ bool Generator::GetSimpleOperand(const ExpressionModel& expr, int index, Operand
     isbyte = false;
     if (node.isconst && Validator::IsScalar(node.type))
     {
-        operand = Operand::Imm(ConstOrdinal(node));
+        operand = Operand::Imm(ConstOrdinalValue(node));
         return true;
     }
     if (!Validator::IsScalar(node.type) || !GetVariableOperand(expr, index, operand))
@@ -88,6 +88,50 @@ bool Generator::GetRightOperand(const ExpressionModel& expr, int index, Operand&
     Emit("MOV", Operand::Reg(0), Operand::Reg(2));
     Emit("MOV", Operand::AutoInc(6), Operand::Reg(0));
     operand = Operand::Reg(2);
+    return true;
+}
+
+// Both operands of a binary operation, see docs/DESIGN.md section 7.10:
+//   OperandsNormal  - R0 = left, other = right (constant, word variable or R2);
+//   OperandsSwapped - R0 = right, other = left (constant, word variable or R2): the left one is simple,
+//                     and the right one has no side effects that could change it;
+//   OperandsStacked - R0 = right, other = (SP)+ with the left value: both are complex.
+bool Generator::GenerateOperands(const ExpressionModel& expr, int left, int right, Operand& other, OperandsOrder& order)
+{
+    Operand operand;
+    bool isbyte;
+    if (GetSimpleOperand(expr, right, operand, isbyte))
+    {
+        order = OperandsNormal;
+        return GenerateValue(expr, left) && GetRightOperand(expr, right, other);
+    }
+    if (GetSimpleOperand(expr, left, operand, isbyte) &&
+        (expr.nodes[left].isconst || !HasSideEffects(expr, right)))
+    {
+        order = OperandsSwapped;
+        if (!GenerateValue(expr, right))
+            return false;
+        if (isbyte)
+        {
+            Emit("CLR", Operand::Reg(2));
+            Emit("BISB", operand, Operand::Reg(2), expr.nodes[left].token.text);
+            operand = Operand::Reg(2);
+        }
+        other = operand;
+        return true;
+    }
+    order = OperandsStacked;
+    if (GetSimpleOperand(expr, left, operand, isbyte) && !isbyte)
+        Emit("MOV", operand, Operand::AutoDec(6), expr.nodes[left].token.text);
+    else
+    {
+        if (!GenerateValue(expr, left))
+            return false;
+        Emit("MOV", Operand::Reg(0), Operand::AutoDec(6));
+    }
+    if (!GenerateValue(expr, right))
+        return false;
+    other = Operand::AutoInc(6);
     return true;
 }
 
@@ -194,13 +238,25 @@ bool Generator::GenerateBinaryValue(const ExpressionModel& expr, int index)
 
     if (op.IsSymbol(SymbolStar))
     {
-        if (!GenerateValue(expr, node.left))
-            return false;
-        Operand right;
-        if (!GetRightOperand(expr, node.right, right))
+        // Multiplication by 2^k: shifts
+        const ExpressionNode& factor = expr.nodes[node.right];
+        int64_t k = factor.isconst ? factor.constvalue.ivalue : 0;
+        if (k > 1 && k <= 16384 && (k & (k - 1)) == 0)
+        {
+            if (!GenerateValue(expr, node.left))
+                return false;
+            int count = 0;
+            while ((1LL << count) < k)
+                count++;
+            EmitShiftConst(true, count);
+            return true;
+        }
+        Operand other;
+        OperandsOrder order;
+        if (!GenerateOperands(expr, node.left, node.right, other, order))
             return false;
         Emit("MOV", Operand::Reg(0), Operand::Reg(1));
-        Emit("MUL", right, Operand::Reg(1), "low word, overflow is not checked");
+        Emit("MUL", other, Operand::Reg(1), "low word, overflow is not checked");
         Emit("MOV", Operand::Reg(1), Operand::Reg(0));
         return true;
     }
@@ -238,9 +294,7 @@ bool Generator::GenerateBinaryValue(const ExpressionModel& expr, int index)
                 Emit("CLR", Operand::Reg(0));
                 return true;
             }
-            Emit("ASH", Operand::Imm(isshl ? n : -n), Operand::Reg(0));
-            if (!isshl)  // Logical shift: clear the copies of the sign bit
-                Emit("BIC", Operand::Imm((int16_t)(~(0xFFFF >> n) & 0xFFFF)), Operand::Reg(0));
+            EmitShiftConst(isshl, (int)n);
             return true;
         }
         Emit("MOV", Operand::Reg(0), Operand::AutoDec(6));
@@ -252,42 +306,137 @@ bool Generator::GenerateBinaryValue(const ExpressionModel& expr, int index)
         return true;
     }
 
-    if (!GenerateValue(expr, node.left))
-        return false;
     const ExpressionNode& rightnode = expr.nodes[node.right];
     if (op.IsKeyword(KeywordAND) && rightnode.isconst)
     {
+        if (!GenerateValue(expr, node.left))
+            return false;
         Emit("BIC", Operand::Imm((int16_t)(~rightnode.constvalue.ivalue & 0xFFFF)), Operand::Reg(0));
         return true;
     }
-    Operand right;
-    if (!GetRightOperand(expr, node.right, right))
+    if (!op.IsSymbol(SymbolPlus) && !op.IsSymbol(SymbolMinus) && !op.IsKeyword(KeywordOR) &&
+        !op.IsKeyword(KeywordAND) && !op.IsKeyword(KeywordXOR))
+        return false;
+    Operand other;
+    OperandsOrder order;
+    if (!GenerateOperands(expr, node.left, node.right, other, order))
         return false;
     if (op.IsSymbol(SymbolPlus))
-        Emit("ADD", right, Operand::Reg(0));
-    else if (op.IsSymbol(SymbolMinus))
-        Emit("SUB", right, Operand::Reg(0));
+        Emit("ADD", other, Operand::Reg(0));
     else if (op.IsKeyword(KeywordOR))
-        Emit("BIS", right, Operand::Reg(0));
-    else if (op.IsKeyword(KeywordAND) || op.IsKeyword(KeywordXOR))
+        Emit("BIS", other, Operand::Reg(0));
+    else if (op.IsSymbol(SymbolMinus))
     {
-        // PDP-11 has no AND: BIC with the complement; XOR takes a register as the source
-        if (right.mode != OpReg)
-        {
-            Emit("MOV", right, Operand::Reg(2));
-            right = Operand::Reg(2);
-        }
-        if (op.IsKeyword(KeywordAND))
-        {
-            Emit("COM", right);
-            Emit("BIC", right, Operand::Reg(0));
-        }
+        if (order == OperandsNormal)
+            Emit("SUB", other, Operand::Reg(0));
         else
-            Emit("XOR", right, Operand::Reg(0));
+        {
+            Emit("NEG", Operand::Reg(0));  // left - right = -right + left
+            Emit("ADD", other, Operand::Reg(0));
+        }
+    }
+    else if (op.IsKeyword(KeywordAND))
+    {
+        // PDP-11 has no AND: BIC with the complement
+        if (order == OperandsStacked)
+        {
+            Emit("COM", Operand::Deferred(6));
+            Emit("BIC", other, Operand::Reg(0));
+        }
+        else if (other.mode == OpImmediate)
+            Emit("BIC", Operand::Imm((int16_t)(~other.value & 0xFFFF)), Operand::Reg(0));
+        else
+        {
+            if (other.mode != OpReg)
+            {
+                Emit("MOV", other, Operand::Reg(2));
+                other = Operand::Reg(2);
+            }
+            Emit("COM", other);
+            Emit("BIC", other, Operand::Reg(0));
+        }
     }
     else
-        return false;
+    {
+        // XOR takes a register as the source
+        if (other.mode != OpReg)
+        {
+            Emit("MOV", other, Operand::Reg(2));
+            other = Operand::Reg(2);
+        }
+        Emit("XOR", other, Operand::Reg(0));
+    }
     return true;
+}
+
+// Whether the code lines from the index on read or write R0; calls count as using it
+bool Generator::LinesUseR0(size_t start) const
+{
+    for (size_t i = start; i < m_code->lines.size(); i++)
+    {
+        const CodeLine& line = m_code->lines[i];
+        if (line.kind == LineRaw || line.kind == LineData || line.opcode == "CALL")
+            return true;
+        if (line.kind != LineInstruction)
+            continue;
+        for (const Operand* op : { &line.src, &line.dst })
+        {
+            switch (op->mode)
+            {
+            case OpNone: case OpImmediate: case OpLabel: case OpAbsolute:
+                break;
+            default:
+                if (op->reg == 0)
+                    return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Shift of R0 by a constant 1..15; shr is logical
+void Generator::EmitShiftConst(bool isshl, int n)
+{
+    if (isshl)
+    {
+        if (n >= 8)
+        {
+            Emit("SWAB", Operand::Reg(0));
+            Emit("CLRB", Operand::Reg(0));
+            n -= 8;
+        }
+        if (n <= 2)
+        {
+            for (int i = 0; i < n; i++)
+                Emit("ASL", Operand::Reg(0));
+        }
+        else
+            Emit("ASH", Operand::Imm(n), Operand::Reg(0));
+        return;
+    }
+    if (n >= 8)
+    {
+        Emit("CLRB", Operand::Reg(0));
+        Emit("SWAB", Operand::Reg(0));
+        n -= 8;
+        // The high byte is zero now: arithmetic shifts are logical
+        if (n <= 2)
+        {
+            for (int i = 0; i < n; i++)
+                Emit("ASR", Operand::Reg(0));
+        }
+        else
+            Emit("ASH", Operand::Imm(-n), Operand::Reg(0));
+        return;
+    }
+    if (n == 1)
+    {
+        Emit("CLC");
+        Emit("ROR", Operand::Reg(0));
+        return;
+    }
+    Emit("ASH", Operand::Imm(-n), Operand::Reg(0));
+    Emit("BIC", Operand::Imm((int16_t)(~(0xFFFF >> n) & 0xFFFF)), Operand::Reg(0), "logical shift");
 }
 
 // Boolean value 0/1 into R0
@@ -335,11 +484,24 @@ bool Generator::GenerateBooleanValue(const ExpressionModel& expr, int index)
         return true;
     }
 
-    // Comparison, in, and/or: through the condition jumps
+    // Comparison, in, and/or: through the condition jumps.
+    // If the condition code does not touch R0: CLR R0 before it, INC R0 when true.
     string falselabel = NewLabel();
-    string endlabel = NewLabel();
+    size_t start = m_code->lines.size();
     if (!GenerateCondition(expr, index, falselabel, false))
         return false;
+    if (!LinesUseR0(start))
+    {
+        CodeLine clear;
+        clear.opcode = "CLR";
+        clear.src = Operand::Reg(0);
+        clear.words = 1;
+        m_code->lines.insert(m_code->lines.begin() + start, clear);
+        Emit("INC", Operand::Reg(0));
+        EmitLabel(falselabel);
+        return true;
+    }
+    string endlabel = NewLabel();
     Emit("MOV", Operand::Imm(1), Operand::Reg(0));
     EmitBranch("BR", endlabel);
     EmitLabel(falselabel);
@@ -479,15 +641,16 @@ bool Generator::GenerateCompare(const ExpressionModel& expr, int index, const st
     }
 
     // General case: values as words, signed comparison (byte values are zero-extended)
-    if (!GenerateValue(expr, node.left))
+    Operand other;
+    OperandsOrder order;
+    if (!GenerateOperands(expr, node.left, node.right, other, order))
         return false;
-    Operand right2;
-    if (!GetRightOperand(expr, node.right, right2))
-        return false;
-    if (right2.mode == OpImmediate && right2.value == 0)
+    if (order != OperandsNormal)
+        Emit("CMP", other, Operand::Reg(0));  // left - right with the right value in R0
+    else if (other.mode == OpImmediate && other.value == 0)
         Emit("TST", Operand::Reg(0));
     else
-        Emit("CMP", Operand::Reg(0), right2);
+        Emit("CMP", Operand::Reg(0), other);
     EmitBranch(GetCompareBranch(node.token, false, jumpiftrue), label);
     return true;
 }

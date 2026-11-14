@@ -1276,7 +1276,9 @@ void Validator::ValidateFor(StatementModel& statement)
         if (t2 != g_typeError && !OrdinalCompatible(vartype, t2))
             Error(statement.expr2.nodes[statement.expr2.root].token.pos, 44, "Type mismatch");
     }
-    statement.forlimit = AllocateTemp(2);
+    // A constant final value is compared directly, without a slot
+    if (statement.expr2.root < 0 || !statement.expr2.nodes[statement.expr2.root].isconst)
+        statement.forlimit = AllocateTemp(2);
     ValidateStatements(statement.statements);
 }
 

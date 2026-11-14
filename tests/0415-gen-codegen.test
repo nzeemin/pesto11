@@ -1,0 +1,157 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program CodeGen;
+var I, J, K: Integer; B: Byte; Bool: Boolean; S: string[10];
+function F(X: Integer): Integer;
+begin
+  F := X
+end;
+begin
+  I := Hi($1234) + Lo($1234);
+  I := J shl 1; I := J shr 1; I := J shl 8; I := J shr 9; I := J * 8;
+  Bool := I < J;
+  Bool := Length(S) > 3;
+  I := 13 - Length(S);
+  I := J - F(K);
+  I := F(J) - F(K);
+  if I < Length(S) then K := 1;
+  for I := 1 to 10 do K := K + I;
+  for B := 255 downto J do K := K - 1;
+  for I := J to K do B := B + 1;
+  I := I + J; I := J + I; I := I - 1; I := I and $FF; I := I or J;
+  B := B or 4; B := B and $F0
+end.
+=== MAC EXPECTED ======================================================
+	.TITLE	TEST
+START::
+	MOV	SP, INIT$S
+	MOV	#-2, R0
+	EMT	354
+	BIC	#1, R0
+	MOV	R0, SP
+	MOV	#70., V00001
+	MOV	V00002, R0
+	ASL	R0
+	MOV	R0, V00001
+	MOV	V00002, R0
+	CLC
+	ROR	R0
+	MOV	R0, V00001
+	MOV	V00002, R0
+	SWAB	R0
+	CLRB	R0
+	MOV	R0, V00001
+	MOV	V00002, R0
+	CLRB	R0
+	SWAB	R0
+	ASR	R0
+	MOV	R0, V00001
+	MOV	V00002, R0
+	ASH	#3., R0
+	MOV	R0, V00001
+	CLR	R0
+	CMP	V00001, V00002
+	BGE	L00001
+	INC	R0
+L00001:
+	MOVB	R0, V00005
+	CLR	R0
+	BISB	V00006, R0
+	CMP	R0, #3.
+	BLE	L00002
+	MOV	#1., R0
+	BR	L00003
+L00002:
+	CLR	R0
+L00003:
+	MOVB	R0, V00005
+	CLR	R0
+	BISB	V00006, R0
+	NEG	R0
+	ADD	#13., R0
+	MOV	R0, V00001
+	MOV	V00002, -(SP)
+	MOV	V00003, -(SP)
+	CALL	P00001
+	NEG	R0
+	ADD	(SP)+, R0
+	MOV	R0, V00001
+	MOV	V00002, -(SP)
+	CALL	P00001
+	MOV	R0, -(SP)
+	MOV	V00003, -(SP)
+	CALL	P00001
+	NEG	R0
+	ADD	(SP)+, R0
+	MOV	R0, V00001
+	CLR	R0
+	BISB	V00006, R0
+	CMP	V00001, R0
+	BGE	L00004
+	MOV	#1., V00003
+L00004:
+	MOV	#1., V00001
+	BR	L00006
+L00005:
+	INC	V00001
+L00006:
+	ADD	V00001, V00003
+	CMP	V00001, #10.
+	BNE	L00005
+L00007:
+	MOV	V00002, V00007
+	MOVB	#255., V00004
+	CMPB	V00004, V00007
+	BLO	L00010
+	BR	L00009
+L00008:
+	DECB	V00004
+L00009:
+	DEC	V00003
+	CMPB	V00004, V00007
+	BNE	L00008
+L00010:
+	MOV	V00003, V00008
+	MOV	V00002, V00001
+	CMP	V00001, V00008
+	BGT	L00013
+	BR	L00012
+L00011:
+	INC	V00001
+L00012:
+	INCB	V00004
+	CMP	V00001, V00008
+	BNE	L00011
+L00013:
+	ADD	V00002, V00001
+	ADD	V00002, V00001
+	DEC	V00001
+	BIC	#-256., V00001
+	BIS	V00002, V00001
+	BISB	#4., V00004
+	BICB	#15., V00004
+HALT::
+INIT$S = . + 2
+	MOV	#776, SP
+	EMT	350
+P00001:
+	MOV	R5, -(SP)
+	MOV	SP, R5
+	TST	-(SP)
+	MOV	4.(R5), -2.(R5)
+L00014:
+	MOV	-2.(R5), R0
+	MOV	R5, SP
+	MOV	(SP)+, R5
+	MOV	(SP)+, (SP)
+	RETURN
+V00001:	.BLKW	1.
+V00002:	.BLKW	1.
+V00003:	.BLKW	1.
+V00004:	.BLKW	1.
+V00005:	.BLKW	1.
+V00006:	.BLKW	6.
+V00007:	.BLKW	1
+V00008:	.BLKW	1
+PEND::
+	.END	START

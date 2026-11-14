@@ -137,6 +137,94 @@ void Generator::GenerateCallStatement(StatementModel& statement)
 
 //////////////////////////////////////////////////////////////////////
 
+// X := X + Y, X - Y, Y + X, X or Y, X and c: one instruction on the variable, see docs/DESIGN.md section 7.10.
+// X is a variable addressed without code, Y a constant or a word variable. Returns false if not applicable.
+bool Generator::GenerateAssignInPlace(StatementModel& statement)
+{
+    const ExpressionModel& target = statement.target;
+    const ExpressionModel& value = statement.expr;
+    const ExpressionNode& targetnode = target.nodes[target.root];
+    const ExpressionNode& valuenode = value.nodes[value.root];
+    if (valuenode.kind != NodeBinary || valuenode.convert != ConvertNone || valuenode.isconst)
+        return false;
+    const Token& op = valuenode.token;
+    bool isplus = op.IsSymbol(SymbolPlus), isminus = op.IsSymbol(SymbolMinus);
+    bool isor = op.IsKeyword(KeywordOR), isand = op.IsKeyword(KeywordAND);
+    if (!isplus && !isminus && !isor && !isand)
+        return false;
+    if (!Validator::IsIntegerType(valuenode.type) && !Validator::IsOrdinal(valuenode.type))
+        return false;
+    if (Validator::IsBooleanType(valuenode.type))
+        return false;  // and/or of Booleans go through the conditions
+    Operand dest;
+    if (!GetVariableOperand(target, target.root, dest))
+        return false;
+    bool isbyte = (Validator::TypeSize(targetnode.type) == 1);
+
+    // Which operand is the target itself
+    Operand left, right;
+    bool leftbyte = false, rightbyte = false;
+    bool leftok = GetSimpleOperand(value, valuenode.left, left, leftbyte) && !value.nodes[valuenode.left].isconst;
+    bool rightok = GetSimpleOperand(value, valuenode.right, right, rightbyte);
+    Operand other;
+    bool otherbyte;
+    bool othervar;
+    if (leftok && left.ToString() == dest.ToString() && leftbyte == isbyte && rightok)
+    {
+        other = right;
+        otherbyte = rightbyte;
+        othervar = !value.nodes[valuenode.right].isconst;
+    }
+    else if ((isplus || isor) && rightok && right.ToString() == dest.ToString() && rightbyte == isbyte &&
+             !value.nodes[valuenode.right].isconst &&
+             GetSimpleOperand(value, valuenode.left, left, leftbyte))
+    {
+        other = left;
+        otherbyte = leftbyte;
+        othervar = !value.nodes[valuenode.left].isconst;
+    }
+    else
+        return false;
+    if (otherbyte)
+        return false;  // A byte variable cannot be a word source
+
+    const string& name = targetnode.token.text;
+    bool isconst = !othervar;
+    int64_t c = isconst ? (int16_t)(other.value & 0xFFFF) : 0;
+    if (isconst && (isplus || isminus) && (c == 1 || c == -1))
+    {
+        bool up = (c == 1) == isplus;
+        Emit(up ? (isbyte ? "INCB" : "INC") : (isbyte ? "DECB" : "DEC"), dest, Operand(), name);
+        return true;
+    }
+    if (isbyte)
+    {
+        // No ADDB/SUBB on PDP-11; BISB and BICB exist
+        if (isor && isconst)
+        {
+            Emit("BISB", Operand::Imm(c & 0xFF), dest, name);
+            return true;
+        }
+        if (isand && isconst)
+        {
+            Emit("BICB", Operand::Imm(~c & 0xFF), dest, name);
+            return true;
+        }
+        return false;
+    }
+    if (isand)
+    {
+        if (!isconst)
+            return false;  // BIC needs the complement
+        Emit("BIC", Operand::Imm((int16_t)(~c & 0xFFFF)), dest, name);
+        return true;
+    }
+    if (isconst && c == 0)
+        return true;  // X := X + 0
+    Emit(isplus ? "ADD" : isminus ? "SUB" : "BIS", other, dest, name);
+    return true;
+}
+
 bool Generator::GenerateAssign(StatementModel& statement)
 {
     const ExpressionModel& target = statement.target;
@@ -166,6 +254,8 @@ bool Generator::GenerateAssign(StatementModel& statement)
     // The target may need its address in R3 first (a field, an element, an outer variable).
     if (!checked)
     {
+        if (GenerateAssignInPlace(statement))
+            return true;
         Operand src, dest;
         bool srcbyte;
         if (valuenode.isconst && GetSimpleOperand(value, value.root, src, srcbyte))
@@ -239,6 +329,14 @@ bool Generator::GenerateRepeat(StatementModel& statement)
 
 // for V := A to B do S: the final value is kept in a temporary, so a goto out of the loop
 // does not break the stack; the equality check before INC keeps V within its type
+// for: the final value is a constant or a slot; the loop is rotated, see docs/DESIGN.md section 7.10:
+//         <pretest: not even once -> E>
+//         BR B
+//   L:    INC var
+//   B:    <body>
+//         CMP var, limit
+//         BNE L
+//   E:
 bool Generator::GenerateFor(StatementModel& statement)
 {
     const ExpressionModel& var = statement.target;
@@ -247,33 +345,71 @@ bool Generator::GenerateFor(StatementModel& statement)
     if (!GetVariableOperand(var, var.root, varop))
         return false;
     bool isbyte = (Validator::TypeSize(varnode.type) == 1);
-    Operand limit = statement.forlimit.asmlabel.empty() ?
-        Operand::Index(5, statement.forlimit.offset) : Operand::Label(statement.forlimit.asmlabel);
+    const char* movop = isbyte ? "MOVB" : "MOV";
+    const char* cmpop = isbyte ? "CMPB" : "CMP";
 
-    if (!GenerateValue(statement.expr2, statement.expr2.root))
-        return false;
-    Emit("MOV", Operand::Reg(0), limit, "final value");
-    if (!GenerateValue(statement.expr, statement.expr.root))
-        return false;
-    Emit(isbyte ? "MOVB" : "MOV", Operand::Reg(0), varop, varnode.token.text);
+    const ExpressionNode& initnode = statement.expr.nodes[statement.expr.root];
+    const ExpressionNode& finalnode = statement.expr2.nodes[statement.expr2.root];
+    Operand limit;
+    if (finalnode.isconst)
+        limit = Operand::Imm(ConstOrdinalValue(finalnode));
+    else
+    {
+        limit = statement.forlimit.asmlabel.empty() ?
+            Operand::Index(5, statement.forlimit.offset) : Operand::Label(statement.forlimit.asmlabel);
+        Operand finalop;
+        bool finalbyte;
+        if (GetSimpleOperand(statement.expr2, statement.expr2.root, finalop, finalbyte) && !finalbyte)
+            Emit("MOV", finalop, limit, "final value");
+        else
+        {
+            if (!GenerateValue(statement.expr2, statement.expr2.root))
+                return false;
+            Emit("MOV", Operand::Reg(0), limit, "final value");
+        }
+    }
 
     string looplabel = NewLabel();
+    string bodylabel = NewLabel();
     string endlabel = NewLabel();
-    Emit("CMP", Operand::Reg(0), limit);
-    EmitBranch(statement.downto ? "BLT" : "BGT", endlabel, "not even once");
-    EmitLabel(looplabel);
-    GenerateStatement(statement.statements[0]);
-    if (isbyte)
+    Operand initop;
+    bool initbyte;
+    bool initsimple = GetSimpleOperand(statement.expr, statement.expr.root, initop, initbyte);
+    if (initnode.isconst && finalnode.isconst)
     {
-        Emit("CLR", Operand::Reg(0));
-        Emit("BISB", varop, Operand::Reg(0), varnode.token.text);
-        Emit("CMP", Operand::Reg(0), limit);
+        // Both known: the pretest is decided now
+        int64_t from = ConstOrdinalValue(initnode), to = ConstOrdinalValue(finalnode);
+        if (from == 0)
+            Emit(isbyte ? "CLRB" : "CLR", varop, Operand(), varnode.token.text);
+        else
+            Emit(movop, initop, varop, varnode.token.text);
+        if (statement.downto ? from < to : from > to)
+            EmitBranch("BR", endlabel, "not even once");
+    }
+    else if (initsimple && (isbyte || !initbyte))
+    {
+        if (initnode.isconst && initop.value == 0)
+            Emit(isbyte ? "CLRB" : "CLR", varop, Operand(), varnode.token.text);
+        else
+            Emit(movop, initop, varop, varnode.token.text);
+        Emit(cmpop, varop, limit);
+        EmitBranch(statement.downto ? (isbyte ? "BLO" : "BLT") : (isbyte ? "BHI" : "BGT"), endlabel, "not even once");
     }
     else
-        Emit("CMP", varop, limit, varnode.token.text);
-    EmitBranch("BEQ", endlabel, "the variable keeps the final value");
-    Emit(statement.downto ? (isbyte ? "DECB" : "DEC") : (isbyte ? "INCB" : "INC"), varop);
-    EmitBranch("BR", looplabel);
+    {
+        if (!GenerateValue(statement.expr, statement.expr.root))
+            return false;
+        Emit(movop, Operand::Reg(0), varop, varnode.token.text);
+        Emit("CMP", Operand::Reg(0), limit);  // Byte values are zero-extended: a signed comparison is right
+        EmitBranch(statement.downto ? "BLT" : "BGT", endlabel, "not even once");
+    }
+    EmitBranch("BR", bodylabel);
+    EmitLabel(looplabel);
+    Emit(statement.downto ? (isbyte ? "DECB" : "DEC") : (isbyte ? "INCB" : "INC"), varop, Operand(), varnode.token.text);
+    EmitLabel(bodylabel);
+    GenerateStatement(statement.statements[0]);
+    Emit(cmpop, varop, limit, varnode.token.text);
+    EmitBranch("BNE", looplabel, "the variable keeps the final value");
     EmitLabel(endlabel);
     return true;
 }
