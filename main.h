@@ -92,7 +92,7 @@ std::filesystem::path FindFileIgnoreCase(const std::filesystem::path& path);
 enum KeywordIndex
 {
     KeywordNone = 0,
-    KeywordABSOLUTE, KeywordAND, KeywordARRAY, KeywordBEGIN, KeywordCASE, KeywordCONST,
+    KeywordABSOLUTE, KeywordAND, KeywordARRAY, KeywordASM, KeywordBEGIN, KeywordCASE, KeywordCONST,
     KeywordDIV, KeywordDO, KeywordDOWNTO, KeywordELSE, KeywordEND, KeywordEXTERNAL,
     KeywordFILE, KeywordFOR, KeywordFORWARD, KeywordFUNCTION, KeywordGOTO, KeywordIF,
     KeywordIN, KeywordINLINE, KeywordLABEL, KeywordMOD, KeywordNIL, KeywordNOT,
@@ -196,6 +196,8 @@ public:
 // It never reads past the current token, so after a '^' token the parser
 // may call ReadControlChar() to take the raw character that follows.
 
+struct AsmLineModel;
+
 class Tokenizer
 {
     struct SourceFile
@@ -219,6 +221,8 @@ public:
     // Read the character right after a '^' token and convert it to a control character.
     // Returns the character code 0..31, or -1 on error (the error is reported).
     int ReadControlChar(const Token& caret);
+    // Raw lines of an asm statement up to END, which is left for the next token. False at the end of the file.
+    bool ReadAsmLines(std::vector<AsmLineModel>& lines);
 private:
     SourceFile& Current() { return m_files.back(); }
     int  PeekChar(size_t offset = 0);
@@ -426,7 +430,7 @@ public:
 
 enum StatementKind
 {
-    StmtEmpty = 0, StmtCompound, StmtAssign, StmtCall, StmtGoto, StmtInline,
+    StmtEmpty = 0, StmtCompound, StmtAssign, StmtCall, StmtGoto, StmtInline, StmtAsm,
     StmtIf, StmtCase, StmtWhile, StmtRepeat, StmtFor, StmtWith,
 };
 
@@ -445,6 +449,62 @@ struct InlineItemModel      // One code element between '/'
 public:
     InlineItemModel() : sizeprefix(0) {}
 };
+
+// Assembler insert asm ... end, see asm.cpp and docs/DESIGN.md section 7.9
+struct AsmNameModel         // Pascal name in an operand, with the span it replaces
+{
+    int     operand;        // Operand index in the line
+    size_t  start, length;  // Replaced text in the operand
+    int     symbol;         // Symbol index
+    string  prefix;         // Variable: "", "#", "@" or "@#" before the name
+    int64_t offset;         // Variable: field offsets plus the +n/-n part
+    string  indexreg;       // Variable: register of (Rn) after the name, empty if none
+    bool    isconst;        // Constant: replaced by its value
+    int64_t value;
+public:
+    AsmNameModel() : operand(0), start(0), length(0), symbol(-1), offset(0), isconst(false), value(0) {}
+};
+
+struct AsmLineModel
+{
+    SourcePos pos;          // Start of the line text
+    string  text;           // Source text
+    std::vector<string> labels;     // With ':' or '::'
+    string  assignname;     // NAME = expression: the name; opcode is "=" or "=="
+    string  opcode;
+    std::vector<string> operands;
+    std::vector<int> operandcols;   // Operand offsets in the text
+    bool    rawoperands;    // .ASCII, .MCALL...: no names in the operands
+    bool    hascomment;
+    string  comment;        // After ';'
+    std::vector<AsmNameModel> names;    // (V)
+    std::vector<string> othernames;     // (V) Names not found: runtime blocks maybe
+    int     words;          // (V) Size estimate
+public:
+    AsmLineModel() : rawoperands(false), hascomment(false), words(0) {}
+};
+
+enum AsmItemKind { AsmItemName, AsmItemRegister, AsmItemNumber, AsmItemChar, AsmItemOther };
+
+struct AsmItem              // Item of an operand: name, register, number, one punctuation char, other
+{
+    AsmItemKind kind;
+    size_t  start, length;
+    string  text;
+public:
+    AsmItem() : kind(AsmItemOther), start(0), length(0) {}
+};
+
+void   ParseAsmLine(const string& text, AsmLineModel& line);
+size_t FindAsmEnd(const string& text);
+bool   IsBlankAsmText(const string& text);
+bool   IsForbiddenAsmDirective(const string& opcode);
+bool   IsAsmRegisterName(const string& name);
+std::vector<AsmItem> ScanAsmOperand(const string& text);
+bool   ParseAsmNumber(const string& text, int64_t& value);
+string AsmLineToString(const AsmLineModel& line, const std::vector<string>& operands);
+int    EstimateAsmWords(const AsmLineModel& line, const std::vector<string>& operands);
+string FormatAsmConst(int64_t value, const string& operand, size_t start);
 
 struct StatementModel;
 
@@ -468,6 +528,7 @@ struct StatementModel
     std::vector<ExpressionModel> withvars;
     Token   gotolabel;
     std::vector<InlineItemModel> inlineitems;
+    std::vector<AsmLineModel> asmlines;
     TempSlot forlimit;      // (V) For: slot for the final value
     std::vector<TempSlot> withslots;  // (V) With: slots for the record addresses
     int     labelsymbol;    // (V) Symbol of the label before the statement
@@ -674,6 +735,7 @@ private:
     StatementModel ParseWith();
     StatementModel ParseGoto();
     StatementModel ParseInline();
+    StatementModel ParseAsm();
     void ParseAssignOrCall(StatementModel& statement, const Token& ident);
 private:
     ExpressionModel ParseExpression();
@@ -721,6 +783,8 @@ struct WithEntry            // Record opened by a with statement
     int     type;           // Record type
     TempSlot slot;          // Slot with the record address
 };
+
+struct Operand;
 
 class Validator
 {
@@ -851,6 +915,10 @@ private:
     void ValidateWith(StatementModel& statement);
     void ValidateGoto(StatementModel& statement);
     void ValidateInline(StatementModel& statement);
+    void ValidateAsm(StatementModel& statement);
+    void ValidateAsmOperand(AsmLineModel& line, int operandindex);
+    bool GetAsmBaseOperand(int symbol, Operand& base, string& error);
+    bool EvaluateAsmOffset(const std::vector<AsmItem>& items, size_t& i, int64_t& value, string& error);
     void ValidateLabelPlacement(StatementModel& statement);
 };
 
@@ -936,6 +1004,8 @@ struct FinalModel
 extern std::vector<std::vector<string>> g_sourcelines;  // Source lines by file index, for comments
 
 string FormatNumber(int64_t value);     // Decimal number for macro11: "12." or "-4."
+string LabelWithOffset(const string& label, int64_t value);  // label, label+n or label-n
+bool   FormatAsmOperand(const Operand& base, const AsmNameModel& name, string& result, string& error);
 bool RealToDecF(double value, uint16_t& high, uint16_t& low);  // DEC F_floating words, see codeline.cpp
 
 
@@ -1030,6 +1100,7 @@ private:
     bool GenerateFor(StatementModel& statement);
     bool GenerateCase(StatementModel& statement);
     bool GenerateGoto(StatementModel& statement);
+    bool GenerateAsm(StatementModel& statement);
     bool GenerateWith(StatementModel& statement);
     bool GenerateStructAssign(StatementModel& statement);
     // Variables, generator-var.cpp

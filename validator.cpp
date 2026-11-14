@@ -1176,6 +1176,9 @@ void Validator::ValidateStatement(StatementModel& statement)
     case StmtInline:
         ValidateInline(statement);
         break;
+    case StmtAsm:
+        ValidateAsm(statement);
+        break;
     case StmtIf:
         ValidateCondition(statement.expr, statement.token.pos);
         ValidateStatements(statement.statements);
@@ -1369,26 +1372,10 @@ void Validator::ValidateGoto(StatementModel& statement)
     m_gotos.push_back({ symbol, label.pos });
 }
 
+// inline with machine codes is not supported: use asm ... end, see docs/DESIGN.md section 7.9
 void Validator::ValidateInline(StatementModel& statement)
 {
-    for (InlineItemModel& item : statement.inlineitems)
-    {
-        for (InlineTermModel& term : item.terms)
-        {
-            if (term.token.type != TokenTypeIdentifier)
-                continue;
-            int symbol = FindSymbol(term.token.text);
-            if (symbol < 0)
-            {
-                Error(term.token.pos, 41, "Unknown identifier: " + term.token.text);
-                continue;
-            }
-            SymbolKind kind = g_program.symbols[symbol].kind;
-            if (kind != SymConst && kind != SymVar && kind != SymParam && kind != SymVarParam &&
-                kind != SymTypedConst && kind != SymProcedure && kind != SymFunction)
-                Error(term.token.pos, 74, "INLINE error: constant, variable or procedure expected");
-        }
-    }
+    Error(statement.token.pos, 200, "Not supported in Pesto/11: INLINE, use asm ... end");
 }
 
 

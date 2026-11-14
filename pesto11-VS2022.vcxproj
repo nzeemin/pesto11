@@ -159,6 +159,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="asm.cpp" />
     <ClCompile Include="codeline.cpp" />
     <ClCompile Include="generator.cpp" />
     <ClCompile Include="generator-stmt.cpp" />

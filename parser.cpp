@@ -22,6 +22,7 @@ const ParserStatementSpec Parser::m_statementspecs[] =
     { KeywordWITH,      &Parser::ParseWith },
     { KeywordGOTO,      &Parser::ParseGoto },
     { KeywordINLINE,    &Parser::ParseInline },
+    { KeywordASM,       &Parser::ParseAsm },
 };
 
 static int NewNode(ExpressionModel& expr, NodeKind kind, const Token& token, int left = -1, int right = -1)
@@ -1048,6 +1049,23 @@ StatementModel Parser::ParseInline()
         Next();
     }
     Expect(SymbolRParen, 5);
+    return statement;
+}
+
+// asm <macro11 lines> end; the tokenizer reads the lines raw, see docs/DESIGN.md section 7.9
+StatementModel Parser::ParseAsm()
+{
+    StatementModel statement;
+    statement.kind = StmtAsm;
+    statement.token = m_token;
+    if (!m_tokenizer->ReadAsmLines(statement.asmlines))
+    {
+        ReportError(statement.token.pos, 91, "Unexpected end of source: END of asm expected");
+        Next();
+        return statement;
+    }
+    Next();
+    ExpectKeyword(KeywordEND, 14);
     return statement;
 }
 

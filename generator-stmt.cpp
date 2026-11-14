@@ -19,6 +19,7 @@ static const char* GetStatementName(StatementKind kind)
     case StmtCall: return "procedure call";
     case StmtGoto: return "goto";
     case StmtInline: return "inline";
+    case StmtAsm: return "asm";
     case StmtIf: return "if";
     case StmtCase: return "case";
     case StmtWhile: return "while";
@@ -74,6 +75,10 @@ void Generator::GenerateStatement(StatementModel& statement)
     case StmtGoto:
         EmitSourceLine(statement.token.pos);
         ok = GenerateGoto(statement);
+        break;
+    case StmtAsm:
+        EmitSourceLine(statement.token.pos);
+        ok = GenerateAsm(statement);
         break;
     case StmtWith:
         EmitSourceLine(statement.token.pos);

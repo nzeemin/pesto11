@@ -1,0 +1,138 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program GenAsm;
+const Max = 10; Neg = -3; Ch = 'A'; Flag = True;
+type Rec = record N, M: Integer end;
+var I, J: Integer; R: Rec; Port: Integer absolute $FF70; Over: Integer absolute J;
+label Done;
+
+procedure P(var V: Integer; W: Integer);
+var L: Integer; LR: Rec;
+begin
+  asm
+1$:     MOV     V, R0           ; @n(R5)
+        MOV     W, R1
+        MOV     LR.M, L
+        MOV     L+2, R2
+        MOV     @L, R3
+        MOV     #Max*2+Neg, R2
+  end
+end;
+
+function F(X: Integer): Integer;
+begin
+  asm MOV X, F end
+end;
+
+begin
+  asm
+        MOV     #Max, I
+        MOV     R.M, J
+        MOV     R+2(R1), J
+        MOV     #R, R0
+        MOV     @R, R0
+        MOV     Over, R0
+        MOV     Port, R0
+        MOV     #Port, R0
+        MOV     Port+2(R1), R0
+        MOV     @Port(R1), R0
+        MOV     #Ch, R0
+        MOV     #Flag, R0
+        MOV     #Neg, R0
+        MOV     #<2*Neg>, R0
+        CALL    P
+        MOV     #F, R0
+        JMP     Done
+        .WORD   I, J, P, Max
+        .BLKW   Max
+  end;
+  while I > 0 do
+  begin
+    asm
+        DEC     I
+        .BLKW   200.
+    end
+  end;
+  asm
+        CALL    WRCH            ; runtime block
+  end;
+Done:
+end.
+=== MAC EXPECTED ======================================================
+	.TITLE	TEST
+	.GLOBL	WRCH
+START::
+	MOV	SP, INIT$S
+	MOV	#-2, R0
+	EMT	354
+	BIC	#1, R0
+	MOV	R0, SP
+L00001:
+	MOV	#10., V00001
+	MOV	V00003+2., V00002
+	MOV	V00003+2.(R1), V00002
+	MOV	#V00003, R0
+	MOV	@V00003, R0
+	MOV	V00002, R0
+	MOV	@#65392., R0
+	MOV	#65392., R0
+	MOV	65394.(R1), R0
+	MOV	@65392.(R1), R0
+	MOV	#65., R0
+	MOV	#1., R0
+	MOV	#-3., R0
+	MOV	#<2*<-3.>>, R0
+	CALL	P00001
+	MOV	#P00002, R0
+	JMP	G00001
+	.WORD	V00001, V00002, P00001, 10.
+	.BLKW	10.
+L00002:
+	TST	V00001
+	BGT	.+6
+	JMP	L00003
+L00004:
+	DEC	V00001
+	.BLKW	200.
+	JMP	L00002
+L00003:
+L00005:
+	CALL	WRCH
+G00001:
+HALT::
+INIT$S = . + 2
+	MOV	#776, SP
+	EMT	350
+P00001:
+	MOV	R5, -(SP)
+	MOV	SP, R5
+	SUB	#6., SP
+L00007:
+1$:	MOV	@6.(R5), R0
+	MOV	4.(R5), R1
+	MOV	-4.(R5), -2.(R5)
+	MOV	0.(R5), R2
+	MOV	@-2.(R5), R3
+	MOV	#10.*2+<-3.>, R2
+L00006:
+	MOV	R5, SP
+	MOV	(SP)+, R5
+	MOV	(SP), 4.(SP)
+	ADD	#4., SP
+	RETURN
+P00002:
+	MOV	R5, -(SP)
+	MOV	SP, R5
+	TST	-(SP)
+L00009:
+	MOV	4.(R5), -2.(R5)
+L00008:
+	MOV	-2.(R5), R0
+	MOV	R5, SP
+	MOV	(SP)+, R5
+	MOV	(SP)+, (SP)
+	RETURN
+V00001:	.BLKW	1.
+V00002:	.BLKW	1.
+V00003:	.BLKW	2.
+	.END	START

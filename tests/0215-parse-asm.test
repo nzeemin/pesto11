@@ -1,0 +1,55 @@
+OPTIONS = -q -p
+=== SOURCE ============================================================
+program ParseAsm;
+var I: Integer;
+begin
+  asm
+        MOV     I, R0           ; comment
+; comment line
+
+LOOP:   DEC     R0
+1$: 2$::  BNE   1$
+        .ASCII  /a;b end/<15><12> ; text with ; and end
+        .ASCIZ  "x,y"
+        MOV     #'A, R1
+        MOV     #"AB, R2
+        MOV     <I+2>, R3
+        X = 5
+        Y == X+1
+        .WORD   1, 2,3
+        END;
+  asm CLR R0 end;
+  asm INC R1 ; comment end
+  end;
+  asm
+        CLR     R2 end;
+  I := 1
+end.
+=== OUTPUT ============================================================
+PROGRAM ParseAsm
+  VAR I: Integer
+  BEGIN
+    ASM
+      | 	MOV	I, R0	; comment
+      | 	; comment line
+      | LOOP:	DEC	R0
+      | 1$:2$::	BNE	1$
+      | 	.ASCII	/a;b end/<15><12>	; text with ; and end
+      | 	.ASCIZ	"x,y"
+      | 	MOV	#'A, R1
+      | 	MOV	#"AB, R2
+      | 	MOV	<I+2>, R3
+      | 	X = 5
+      | 	Y == X+1
+      | 	.WORD	1, 2, 3
+    END
+    ASM
+      | 	CLR	R0
+    END
+    ASM
+      | 	INC	R1	; comment end
+    END
+    ASM
+      | 	CLR	R2
+    END
+    ASSIGN I := 1

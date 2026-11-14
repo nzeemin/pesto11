@@ -12,7 +12,7 @@
 //NOTE: This array should be in the same order as the KeywordIndex enum, it is sorted for the binary search
 static const char* Keywords[] =
 {
-    "ABSOLUTE", "AND", "ARRAY", "BEGIN", "CASE", "CONST",
+    "ABSOLUTE", "AND", "ARRAY", "ASM", "BEGIN", "CASE", "CONST",
     "DIV", "DO", "DOWNTO", "ELSE", "END", "EXTERNAL",
     "FILE", "FOR", "FORWARD", "FUNCTION", "GOTO", "IF",
     "IN", "INLINE", "LABEL", "MOD", "NIL", "NOT",
@@ -483,6 +483,39 @@ int Tokenizer::ReadControlChar(const Token& caret)
     }
     GetChar();
     return upper ^ 0x40;
+}
+
+bool Tokenizer::ReadAsmLines(std::vector<AsmLineModel>& lines)
+{
+    for (;;)
+    {
+        SourcePos pos = GetPos();
+        string text;
+        int ch;
+        while ((ch = PeekChar(text.size())) >= 0 && ch != '\r' && ch != '\n')
+            text += (char)ch;
+        size_t end = FindAsmEnd(text);
+        string part = (end == string::npos) ? text : text.substr(0, end);
+        if (!IsBlankAsmText(part))
+        {
+            AsmLineModel line;
+            line.pos = pos;
+            ParseAsmLine(part, line);
+            lines.push_back(line);
+        }
+        if (end != string::npos)
+        {
+            for (size_t i = 0; i < end; i++)
+                GetChar();
+            m_separated = true;
+            return true;
+        }
+        for (size_t i = 0; i < text.size(); i++)
+            GetChar();
+        if (PeekChar() < 0)
+            return false;
+        GetChar();  // Line end
+    }
 }
 
 void Tokenizer::TokenizeIdentifierOrKeyword(Token& token)

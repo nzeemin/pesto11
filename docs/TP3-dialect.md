@@ -36,6 +36,8 @@ var       while     with      xor
 
 Сверх стандартного Pascal добавлены: `absolute`, `external`, `inline`, `overlay`, `shl`, `shr`, `string`, `xor`. Слово `forward` в руководстве отмечено как зарезервированное.
 
+**[P11]** Добавлено зарезервированное слово `asm` (раздел 10).
+
 ### 1.3. Идентификаторы (§4.1)
 
 Начинается с буквы или `_`, дальше буквы, цифры и `_`. Значимы все символы.
@@ -205,7 +207,8 @@ param-section      ::= identifier-list ":" type-identifier
 ```
 compound-statement ::= "begin" statement { ";" statement } "end"
 statement          ::= [ label ":" ] ( simple-statement | structured-statement )
-simple-statement   ::= assignment | procedure-call | goto-statement | inline-statement | (пусто)
+simple-statement   ::= assignment | procedure-call | goto-statement | inline-statement
+                     | asm-statement | (пусто)
 assignment         ::= ( variable | function-identifier ) ":=" expression
 procedure-call     ::= procedure-identifier [ "(" actual-param { "," actual-param } ")" ]
 actual-param       ::= expression [ ":" expression [ ":" expression ] ]
@@ -214,6 +217,7 @@ inline-statement   ::= "inline" "(" code-element { "/" code-element } ")"
 code-element       ::= [ "<" | ">" ] code-item { ( "+" | "-" ) code-item }
 code-item          ::= unsigned-integer | constant-identifier | variable-identifier
                      | subprogram-identifier | "*"
+asm-statement      ::= "asm" { строка ассемблера macro11 } "end"      [P11]
 
 structured-statement ::= compound-statement | if-statement | case-statement
                      | while-statement | repeat-statement | for-statement | with-statement
@@ -232,7 +236,7 @@ with-statement     ::= "with" variable { "," variable } "do" statement
 - `else` относится к ближайшему `if` без `else` (§7.2.2.1). Перед `else` в `if` точка с запятой недопустима.
 - В `case` ветка `else` может содержать несколько операторов через `;` до `end` (прил. I). Это расширение TP3.
 - Тип меток `case` совпадает с типом селектора. Селектор — любой простой тип, кроме Real (ошибка 46).
-- `inline`: подробности в разделе 10.
+- `inline` и `asm`: подробности в разделе 10.
 - **Параметры с форматом** `x:5`, `r:8:2` допустимы только в `Write`, `WriteLn` и `Str`. Это стандартные идентификаторы, их можно переопределить, поэтому парсер принимает формат у любого параметра, а лишний формат отвергает валидатор.
 - `else` внутри ветки `case` относится к `if`, если этот `if` ещё без `else`: `case x of 1: if a then b else c end` — `else c` принадлежит `if`. **[?]** Проверить на эталоне.
 - Оператор, начинающийся с идентификатора, различается по следующей лексеме: `:=` — присваивание, `:` — метка, `[` `.` `^` — присваивание элементу, иначе — вызов процедуры. Метка может быть и числом: `10: x := 1`.
@@ -572,7 +576,12 @@ selector           ::= "[" expression { "," expression } "]" | "." field-identif
 - `<` принудительно даёт байт, `>` — слово;
 - у переменной берётся адрес (или смещение для локальной).
 
-**[P11]** Команды PDP-11 состоят из слов. Варианты: всегда выдавать слово (а `<` выдаёт байт с последующим `.EVEN`), или сохранить правило TP3 и требовать чётного числа байт. Решим при реализации. Смещение локальной переменной — относительно R5.
+**[P11]** `inline` не поддерживается (ошибка 200). Вместо него — вставка `asm … end`, как в поздних Turbo Pascal:
+- текст между `asm` и `end` — строки ассемблера macro11, они попадают в `.MAC`; можно и в одну строку: `asm CLR R0 end`;
+- имена Pascal в операндах заменяются на операнды macro11: `MOV I, R0` → `MOV -6(R5), R0`;
+- R0–R4 можно портить, R5 и баланс SP сохранять.
+
+Правила подстановки, ограничения и ошибки — в [DESIGN.md](DESIGN.md) §7.9.
 
 **`external адрес`** — подпрограмма в машинных кодах по фиксированному адресу. Соглашение о передаче параметров описано в [DESIGN.md](DESIGN.md), а не берётся из CP/M-версии.
 
@@ -619,7 +628,7 @@ selector           ::= "[" expression { "," expression } "]" | "." field-identif
 | 71 | недопустимый `goto` (внутрь `for`) |
 | 72 | метка вне текущего блока |
 | 73 | не найдено тело `forward`-подпрограммы |
-| 74 | ошибка в `inline` |
+| 74 | ошибка в `inline` (**[P11]**: ошибка во вставке `asm`) |
 | 75 | недопустимое использование `absolute` |
 | 76, 77, 92 | оверлеи (у нас — «не поддерживается») |
 | 90 | include-файл не найден |
@@ -685,7 +694,7 @@ selector           ::= "[" expression { "," expression } "]" | "." field-identif
 2. Код всегда рекурсивный. `{$A±}` игнорируется, ограничение D.2 снято.
 3. Слова выравниваются по чётным адресам, поэтому `SizeOf` записей и массивов может отличаться.
 4. Нет `Port`, `Bdos`/`Bios`/`BdosHL`/`BiosHL`, `Chain`/`Execute`, `overlay`, `RecurPtr`, `Aux`/`Usr`, `LowVideo`/`NormVideo`.
-5. `inline` и `external` работают с машинным кодом PDP-11 и соглашениями Pesto/11.
+5. `inline` не поддерживается, вместо него вставки `asm … end` (зарезервировано слово `asm`). `external` работает с машинным кодом PDP-11 и соглашениями Pesto/11.
 6. Имена файлов в формате RT-11. Исходник и строки в КОИ-8Р.
 7. Нет ограничения на длину строки исходника и глубину `with`.
 8. Расширение: `MemW`.

@@ -1,0 +1,151 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+label Skip;
+const Max = 10; Neg = -3; Letter = 'A';
+type Rec = record N, M: Integer end;
+var I, J, K: Integer; R: Rec; A: array[1..4] of Integer; Ptr: ^Integer;
+
+procedure Twice(var V: Integer; W: Integer);
+var L: Integer; LR: Rec;
+begin
+  LR.M := W;
+  asm
+        MOV     LR.M, L
+        ASL     L
+        MOV     L, V
+  end
+end;
+
+function Sum3(X, Y, Z: Integer): Integer;
+begin
+  asm
+        MOV     X, R0
+        ADD     Y, R0
+        ADD     Z, R0
+        MOV     R0, Sum3
+  end
+end;
+
+function Fact(N: Integer): Integer;
+var T: Integer;
+begin
+  if N <= 1 then Fact := 1
+  else
+  begin
+    T := Fact(N - 1);
+    asm
+        MOV     N, R1
+        MUL     T, R1
+        MOV     R1, Fact
+    end
+  end
+end;
+
+procedure Count(N: Integer);
+begin
+  asm
+        CLR     R0
+        MOV     N, R1
+        BEQ     2$
+1$:     ADD     #Max, R0
+        SOB     R1, 1$
+2$:     MOV     R0, K
+  end
+end;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('VARS');
+  asm
+        MOV     #Max, I
+        MOV     #Neg, J
+  end;
+  Check(I = 10, 1); Check(J = -3, 2);
+  R.N := 5; R.M := 7;
+  asm
+        MOV     R.M, I
+        MOV     R+0, J
+  end;
+  Check(I = 7, 3); Check(J = 5, 4);
+  asm
+        MOV     #Letter, I
+  end;
+  Check(I = Ord('A'), 5);
+  Group('ARRAYS');
+  A[1] := 11; A[2] := 22; A[3] := 33; A[4] := 44;
+  asm
+        MOV     #4, R1
+        MOV     A(R1), I
+        MOV     #A, R2
+        MOV     6(R2), J
+  end;
+  Check(I = 33, 1); Check(J = 44, 2);
+  New(Ptr); Ptr^ := 99;
+  asm
+        MOV     @Ptr, I
+  end;
+  Check(I = 99, 3);
+  Group('PROCS');
+  Twice(I, 21); Check(I = 42, 1);
+  Check(Sum3(1, 2, 3) = 6, 2);
+  Check(Fact(7) = 5040, 3);
+  Count(4); Check(K = 40, 4);
+  Count(0); Check(K = 0, 5);
+  asm
+        MOV     #3, -(SP)
+        CALL    Count
+  end;
+  Check(K = 30, 6);
+  Group('LABELS');
+  I := 0;
+  asm
+        JMP     Skip
+  end;
+  I := 1;
+Skip:
+  Check(I = 0, 1);
+  asm
+1$:     INC     I
+        CMP     I, #5
+        BLT     1$
+  end;
+  asm
+1$:     INC     I
+        CMP     I, #8.
+        BLT     1$
+  end;
+  Check(I = 8, 2);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+VARS         PASS   5
+ARRAYS       PASS   3
+PROCS        PASS   6
+LABELS       PASS   2
+TOTAL PASS 16 FAIL 0

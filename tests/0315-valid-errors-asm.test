@@ -1,0 +1,62 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program AsmErrors;
+const RealC = 1.5; Str = 'abc'; N = 4;
+type Rec = record A, B: Integer end;
+var I: Integer; R: Rec; P: ^Integer; Port: Integer absolute $FF70;
+
+procedure Outer(var V: Integer; W: Integer);
+var L: Integer;
+  procedure Inner;
+  begin
+    asm
+        MOV     L, R0           ; enclosing procedure
+    end
+  end;
+begin
+  asm
+        MOV     @V, R0          ; var parameter: only V
+        MOV     V+2, R0
+        MOV     #W, R0          ; local: no #
+        MOV     L(R1), R0       ; local: no index
+        MOV     Port(R1)+2, R0  ; text after the name
+  end
+end;
+
+begin
+  asm
+        MOV     RealC, R0
+        MOV     Str, R0
+        MOV     R.C, R0         ; unknown field
+        MOV     N.A, R0         ; constant with a field
+        MOV     2+I, R0         ; name not at the start
+        MOV     I+X, R0         ; not a constant
+        MOV     I+9, R0         ; not an octal number
+        MOV     @Port, R0       ; absolute with @ needs (Rn)
+        MOV     Rec, R0         ; type
+        .BLKW   COUNT
+        .TITLE  X
+I:      NOP                     ; warning
+  end;
+  inline($1234)
+end.
+=== OUTPUT ============================================================
+TEST.PAS(11,17): error 74: Error in asm: L: variable of an enclosing procedure cannot be used, take its address in Pascal
+TEST.PAS(16,18): error 74: Error in asm: V: var parameter: only X is allowed
+TEST.PAS(17,17): error 74: Error in asm: V: var parameter: only X is allowed
+TEST.PAS(18,18): error 74: Error in asm: W: local variable or parameter: X, X+n or @X expected
+TEST.PAS(19,17): error 74: Error in asm: L: local variable or parameter: X, X+n or @X expected
+TEST.PAS(20,17): error 74: Error in asm: unexpected text after the Pascal name Port
+TEST.PAS(26,17): error 74: Error in asm: only ordinal constants can be used: RealC
+TEST.PAS(27,17): error 74: Error in asm: only ordinal constants can be used: Str
+TEST.PAS(28,17): error 74: Error in asm: unknown field C in R.C
+TEST.PAS(29,17): error 74: Error in asm: only ordinal constants can be used: N.A
+TEST.PAS(30,19): error 74: Error in asm: Pascal name must start the operand (X, X+n, X(Rn), #X, @X): I
+TEST.PAS(31,17): error 74: Error in asm: number or ordinal constant expected after +/-: X
+TEST.PAS(32,17): error 74: Error in asm: bad number 9
+TEST.PAS(33,18): error 74: Error in asm: Port: absolute variable: X, X+n, X(Rn), #X or @X(Rn) expected
+TEST.PAS(34,17): error 74: Error in asm: Rec: only constants, variables, procedures and labels can be used
+TEST.PAS(35,1): error 74: Error in asm: .BLKW needs a number or a constant
+TEST.PAS(36,1): error 74: Error in asm: directive .TITLE is not allowed
+TEST.PAS(37,1): warning: asm symbol I has the name of a Pascal identifier, references to it are replaced
+TEST.PAS(39,3): error 200: Not supported in Pesto/11: INLINE, use asm ... end

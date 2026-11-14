@@ -25,7 +25,7 @@ static string RegisterName(int reg)
 }
 
 // label, label+n or label-n
-static string LabelWithOffset(const string& label, int64_t value)
+string LabelWithOffset(const string& label, int64_t value)
 {
     if (value == 0)
         return label;

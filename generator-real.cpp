@@ -10,11 +10,6 @@
 
 //////////////////////////////////////////////////////////////////////
 
-static bool IsRealNode(const ExpressionNode& node)
-{
-    return Validator::IsRealType(node.type) || node.convert == ConvertIntToReal;
-}
-
 // Real constant onto the stack: the low word first, then the high word
 void Generator::PushRealConst(double value)
 {

@@ -435,6 +435,12 @@ static void DumpStatement(std::ostream& out, const StatementModel& statement, in
         }
         out << ")" << directives << std::endl;
         break;
+    case StmtAsm:
+        out << "ASM" << directives << std::endl;
+        for (const AsmLineModel& line : statement.asmlines)
+            out << pad << "  | " << AsmLineToString(line, line.operands) << std::endl;
+        out << pad << "END" << std::endl;
+        break;
     case StmtIf:
         out << "IF " << statement.expr.ToString() << directives << std::endl;
         out << pad << "  THEN" << std::endl;
