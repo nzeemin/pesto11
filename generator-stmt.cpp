@@ -1,4 +1,5 @@
 
+#include <algorithm>
 #include <cassert>
 #include <cstring>
 
@@ -157,15 +158,26 @@ bool Generator::GenerateAssignInPlace(StatementModel& statement)
     if (Validator::IsBooleanType(valuenode.type))
         return false;  // and/or of Booleans go through the conditions
     Operand dest;
-    if (!GetVariableOperand(target, target.root, dest))
+    if (!GetStaticOperand(target, target.root, dest))
         return false;
     bool isbyte = (Validator::TypeSize(targetnode.type) == 1);
+
+    // An operand without code: a constant, a variable or p^ with a static pointer
+    auto operandof = [&](int index, Operand& operand, bool& opbyte) -> bool
+    {
+        if (GetSimpleOperand(value, index, operand, opbyte))
+            return true;
+        if (!Validator::IsScalar(value.nodes[index].type) || !GetStaticOperand(value, index, operand))
+            return false;
+        opbyte = (Validator::TypeSize(value.nodes[index].type) == 1);
+        return true;
+    };
 
     // Which operand is the target itself
     Operand left, right;
     bool leftbyte = false, rightbyte = false;
-    bool leftok = GetSimpleOperand(value, valuenode.left, left, leftbyte) && !value.nodes[valuenode.left].isconst;
-    bool rightok = GetSimpleOperand(value, valuenode.right, right, rightbyte);
+    bool leftok = operandof(valuenode.left, left, leftbyte) && !value.nodes[valuenode.left].isconst;
+    bool rightok = operandof(valuenode.right, right, rightbyte);
     Operand other;
     bool otherbyte;
     bool othervar;
@@ -177,7 +189,7 @@ bool Generator::GenerateAssignInPlace(StatementModel& statement)
     }
     else if ((isplus || isor) && rightok && right.ToString() == dest.ToString() && rightbyte == isbyte &&
              !value.nodes[valuenode.right].isconst &&
-             GetSimpleOperand(value, valuenode.left, left, leftbyte))
+             operandof(valuenode.left, left, leftbyte))
     {
         other = left;
         otherbyte = leftbyte;
@@ -239,7 +251,11 @@ bool Generator::GenerateAssign(StatementModel& statement)
     if (Validator::IsSetType(type))
         return GenerateSetAssign(statement);
     if (Validator::IsRealType(type))
+    {
+        if (GenerateRealAssignDirect(target, value))
+            return true;
         return GenerateReal(value, value.root) && StoreReal(target, target.root);
+    }
     if (Validator::IsArrayType(type) || Validator::IsRecordType(type))
         return GenerateStructAssign(statement);
     if (!Validator::IsScalar(type))
@@ -273,6 +289,18 @@ bool Generator::GenerateAssign(StatementModel& statement)
         }
         if (GetSimpleOperand(value, value.root, src, srcbyte) && srcbyte == isbyte)
         {
+            if (!GenerateDesignator(target, target.root, 3, dest))
+                return false;
+            Emit(isbyte ? "MOVB" : "MOV", src, dest, targetnode.token.text);
+            return true;
+        }
+        // Element to element: the source address in R2, the target address in R3, one MOV.
+        // The target code must not touch R2: its indexes are constants or simple variables.
+        if (IsDesignator(value, value.root) && valuenode.convert == ConvertNone &&
+            (Validator::TypeSize(valuenode.type) == 1) == isbyte && IsSimpleDesignator(target, target.root))
+        {
+            if (!GenerateDesignator(value, value.root, 2, src))
+                return false;
             if (!GenerateDesignator(target, target.root, 3, dest))
                 return false;
             Emit(isbyte ? "MOVB" : "MOV", src, dest, targetnode.token.text);
@@ -429,47 +457,118 @@ bool Generator::GenerateFor(StatementModel& statement)
     return true;
 }
 
-// case: a chain of comparisons with the selector in R0, then the branches
+// case: a jump table or a chain of comparisons next to the bodies, whichever is shorter.
+// See docs/DESIGN.md section 7.11. The selector is in R0 (byte values zero-extended).
 bool Generator::GenerateCase(StatementModel& statement)
 {
     if (!GenerateValue(statement.expr, statement.expr.root))
         return false;
 
-    std::vector<string> elementlabels;
-    for (CaseElementModel& element : statement.caseelements)
+    struct CaseItem { int64_t from, to; size_t element; };
+    std::vector<CaseItem> items;
+    for (size_t i = 0; i < statement.caseelements.size(); i++)
     {
-        string elementlabel = NewLabel();
-        elementlabels.push_back(elementlabel);
-        for (CaseLabelModel& label : element.labels)
+        for (CaseLabelModel& label : statement.caseelements[i].labels)
         {
             int64_t from = label.from.nodes[label.from.root].constvalue.ivalue;
-            if (label.to.IsEmpty())
-            {
-                Emit("CMP", Operand::Reg(0), Operand::Imm(from));
-                EmitBranch("BEQ", elementlabel);
-                continue;
-            }
-            int64_t to = label.to.nodes[label.to.root].constvalue.ivalue;
-            string next = NewLabel();
-            Emit("CMP", Operand::Reg(0), Operand::Imm(from));
-            EmitBranch("BLT", next);
-            Emit("CMP", Operand::Reg(0), Operand::Imm(to));
-            EmitBranch("BLE", elementlabel);
-            EmitLabel(next);
+            int64_t to = label.to.IsEmpty() ? from : label.to.nodes[label.to.root].constvalue.ivalue;
+            items.push_back({ from, to, i });
         }
     }
 
+    // Dispatch sizes in words: a chain costs 3 words per label and 6 per range
+    int64_t chainsize = 0, low = 0, high = 0;
+    for (size_t k = 0; k < items.size(); k++)
+    {
+        chainsize += (items[k].from == items[k].to) ? 3 : 6;
+        low = (k == 0) ? items[k].from : std::min(low, items[k].from);
+        high = (k == 0) ? items[k].to : std::max(high, items[k].to);
+    }
+    int64_t span = high - low + 1;
+    int64_t tablesize = (low != 0 ? 2 : 0) + 2 + 1 + 1 + 2 + span;
+    bool usetable = !items.empty() && span <= 1024 && tablesize < chainsize;
+
+    std::vector<string> bodylabels;
+    for (size_t i = 0; i < statement.caseelements.size(); i++)
+        bodylabels.push_back(NewLabel());
+    string elselabel = NewLabel();
     string endlabel = NewLabel();
+
+    if (usetable)
+    {
+        if (low != 0)
+            Emit("SUB", Operand::Imm(low), Operand::Reg(0), "lowest label");
+        Emit("CMP", Operand::Reg(0), Operand::Imm(span - 1));
+        EmitBranch("BHI", elselabel, "unsigned: also below the lowest label");
+        Emit("ASL", Operand::Reg(0));
+        string table = NewLabel();
+        Operand jump = Operand::IndexDeferred(0, 0);
+        jump.label = table;
+        Emit("JMP", jump, Operand(), "jump table");
+        std::vector<string> entries((size_t)span, elselabel);
+        for (const CaseItem& item : items)
+        {
+            for (int64_t v = item.from; v <= item.to; v++)
+                entries[(size_t)(v - low)] = bodylabels[item.element];
+        }
+        EmitLabel(table);
+        for (size_t k = 0; k < entries.size(); k += 8)
+        {
+            string text;
+            size_t n = std::min<size_t>(8, entries.size() - k);
+            for (size_t j = 0; j < n; j++)
+                text += (j > 0 ? ", " : "") + entries[k + j];
+            EmitData(".WORD", text, (int)n);
+        }
+        for (size_t i = 0; i < statement.caseelements.size(); i++)
+        {
+            EmitLabel(bodylabels[i]);
+            GenerateStatement(statement.caseelements[i].statement[0]);
+            EmitBranch("BR", endlabel);
+        }
+    }
+    else
+    {
+        // Every element: its labels, then its body; R0 stays as long as no body ran
+        for (size_t i = 0; i < statement.caseelements.size(); i++)
+        {
+            string next = NewLabel();
+            std::vector<const CaseItem*> own;
+            for (const CaseItem& item : items)
+            {
+                if (item.element == i)
+                    own.push_back(&item);
+            }
+            for (size_t k = 0; k < own.size(); k++)
+            {
+                bool last = (k + 1 == own.size());
+                const CaseItem& item = *own[k];
+                if (item.from == item.to)
+                {
+                    if (item.from == 0)
+                        Emit("TST", Operand::Reg(0));
+                    else
+                        Emit("CMP", Operand::Reg(0), Operand::Imm(item.from));
+                    EmitBranch(last ? "BNE" : "BEQ", last ? next : bodylabels[i]);
+                    continue;
+                }
+                string skip = last ? next : NewLabel();
+                Emit("CMP", Operand::Reg(0), Operand::Imm(item.from));
+                EmitBranch("BLT", skip);
+                Emit("CMP", Operand::Reg(0), Operand::Imm(item.to));
+                EmitBranch(last ? "BGT" : "BLE", last ? next : bodylabels[i]);
+                if (!last)
+                    EmitLabel(skip);
+            }
+            EmitLabel(bodylabels[i]);
+            GenerateStatement(statement.caseelements[i].statement[0]);
+            EmitBranch("BR", endlabel);
+            EmitLabel(next);
+        }
+    }
+    EmitLabel(elselabel);
     for (StatementModel& child : statement.statements)  // else part
         GenerateStatement(child);
-    EmitBranch("BR", endlabel);
-    for (size_t i = 0; i < statement.caseelements.size(); i++)
-    {
-        EmitLabel(elementlabels[i]);
-        GenerateStatement(statement.caseelements[i].statement[0]);
-        if (i + 1 < statement.caseelements.size())
-            EmitBranch("BR", endlabel);
-    }
     EmitLabel(endlabel);
     return true;
 }

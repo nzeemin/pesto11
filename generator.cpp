@@ -337,7 +337,8 @@ void Generator::GenerateProcedure(int procindex)
     // Epilogue: restore the caller frame, pop the parameters (DESIGN 7.3)
     if (needframe)
     {
-        Emit("MOV", Operand::Reg(5), Operand::Reg(6));
+        if (proc.localsize > 0)
+            Emit("MOV", Operand::Reg(5), Operand::Reg(6));  // Without locals SP is already at R5
         Emit("MOV", Operand::AutoInc(6), Operand::Reg(5));
     }
     int params = proc.paramsize;

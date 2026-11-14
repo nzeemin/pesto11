@@ -158,6 +158,7 @@ private:
     bool RealReload(size_t i);
     bool MoveThroughRegister(size_t i);
     bool PushPop(size_t i);
+    bool RenameRegister(size_t i);
     bool Immediate(size_t i);
     bool RedundantTest(size_t i);
     bool BranchToNext(size_t i);
@@ -172,6 +173,7 @@ const Peephole::Pattern Peephole::m_patterns[] =
     { "RealReload",          &Peephole::RealReload },
     { "MoveThroughRegister", &Peephole::MoveThroughRegister },
     { "PushPop",             &Peephole::PushPop },
+    { "RenameRegister",      &Peephole::RenameRegister },
     { "Immediate",           &Peephole::Immediate },
     { "RedundantTest",       &Peephole::RedundantTest },
     { "BranchToNext",        &Peephole::BranchToNext },
@@ -475,6 +477,63 @@ bool Peephole::PushPop(size_t i)
     merged.src = first.src;
     merged.words = InstructionWords(merged);
     m_lines[i] = merged;
+    Remove(j);
+    return true;
+}
+
+static bool UsesReg(const Operand& operand, int reg)
+{
+    return IsReg(operand, reg) || UsesRegAsAddress(operand, reg);
+}
+
+// A value computed in R0 only to be moved into another register:
+//   MOV src, R0 / ASL R0 / ADD x, R0 ... / MOV R0, Rn  ->  MOV src, Rn / ASL Rn / ADD x, Rn ...
+// when R0 is dead after and Rn is not used before
+bool Peephole::RenameRegister(size_t i)
+{
+    if (!IsInstruction(i, "MOV") || !IsReg(m_lines[i].dst, 0) || UsesReg(m_lines[i].src, 0))
+        return false;
+    std::vector<size_t> body;
+    size_t j = i;
+    int reg = -1;
+    for (;;)
+    {
+        j = Next(j);
+        if (j == string::npos || m_lines[j].kind != LineInstruction || !m_lines[j].text.empty())
+            return false;
+        const CodeLine& line = m_lines[j];
+        if (line.opcode == "MOV" && IsReg(line.src, 0) && line.dst.mode == OpReg && line.dst.reg >= 1 && line.dst.reg <= 4)
+        {
+            reg = line.dst.reg;
+            break;
+        }
+        const string& op = line.opcode;
+        bool single = (op == "ASL" || op == "ASR" || op == "INC" || op == "DEC" || op == "NEG" || op == "COM" ||
+            op == "SWAB" || op == "CLRB") && IsReg(line.src, 0) && line.dst.mode == OpNone;
+        bool twoop = (op == "ADD" || op == "SUB" || op == "BIS" || op == "BIC") && IsReg(line.dst, 0) &&
+            !UsesReg(line.src, 0);
+        if ((!single && !twoop) || body.size() >= 8)
+            return false;
+        body.push_back(j);
+    }
+    if (body.empty() || UsesReg(m_lines[i].src, reg))
+        return false;
+    for (size_t k : body)
+    {
+        if (UsesReg(m_lines[k].src, reg) || UsesReg(m_lines[k].dst, reg))
+            return false;
+    }
+    if (!IsRegDeadAfter(j, 0) || FlagsReadAfter(j, FlagV | FlagC))
+        return false;
+    m_lines[i].dst = Operand::Reg(reg);
+    for (size_t k : body)
+    {
+        CodeLine& line = m_lines[k];
+        if (IsReg(line.src, 0))
+            line.src = Operand::Reg(reg);
+        if (IsReg(line.dst, 0))
+            line.dst = Operand::Reg(reg);
+    }
     Remove(j);
     return true;
 }

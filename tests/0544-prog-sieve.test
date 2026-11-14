@@ -1,0 +1,36 @@
+OPTIONS = -q
+FRAMES = 3000
+=== SOURCE ============================================================
+PROGRAM SIEVE;
+
+CONST
+    SIZE = 8190;
+
+TYPE
+    FLAGTYPE = ARRAY[ 0..SIZE ] OF BOOLEAN;
+
+VAR
+    I, K, PRIME, COUNT, ITER : INTEGER;
+    FLAGS : FLAGTYPE;
+
+BEGIN
+    FOR ITER := 1 TO 10 DO BEGIN
+        COUNT := 0;
+        FOR I := 0 TO SIZE DO FLAGS[ I ] := TRUE;
+        FOR I := 0 TO SIZE DO BEGIN
+            IF FLAGS[ I ] THEN BEGIN
+                PRIME := I + I + 3;
+                K := I + PRIME;
+                WHILE K <= SIZE DO BEGIN
+                    FLAGS[ K ] := FALSE;
+                    K := K + PRIME;
+                END;
+                COUNT := COUNT + 1;
+            END;
+        END;
+    END;
+
+    WRITELN( 'count of primes: ', COUNT );
+END.
+=== SCREEN EXPECTED ===================================================
+count of primes: 1899

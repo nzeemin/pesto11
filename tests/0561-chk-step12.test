@@ -1,0 +1,115 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+type Rec = record N, M: Integer end;
+  RecPtr = ^Rec;
+  Grid = array[0..3, 1..5, 1..7] of Integer;
+var I, J, K: Integer; C: Char; B: Byte; X, Y: Real;
+  P: ^Integer; Q: ^Char; RP: RecPtr; AP: ^Grid;
+  A: array[1..10] of Integer; S: array[1..6] of Char; G: Grid;
+function Dense(V: Integer): Integer;
+begin
+  case V of
+    1: Dense := 10; 2: Dense := 20; 3, 4: Dense := 34; 5..7: Dense := 57;
+    9: Dense := 90; 10: Dense := 100; 11: Dense := 110; 12: Dense := 120
+  else Dense := -1
+  end
+end;
+function Sparse(V: Integer): Integer;
+begin
+  case V of
+    -100: Sparse := 1; 0: Sparse := 2; 1000..1010: Sparse := 3; 30000: Sparse := 4
+  else Sparse := -1
+  end
+end;
+function Letter(Ch: Char): Integer;
+begin
+  Letter := 0;
+  case Ch of
+    'a', 'b': Letter := 1; 'c'..'f': Letter := 2; 'g': Letter := 3; 'h': Letter := 4;
+    'i': Letter := 5; 'j': Letter := 6; 'k': Letter := 7; 'l': Letter := 8; 'm': Letter := 9; 'z': Letter := 26
+  end
+end;
+procedure LocalPtr(var Res: Integer);
+var LP: ^Integer; LR: RecPtr;
+begin
+  New(LP); LP^ := 7; LP^ := LP^ * 3;
+  New(LR); LR^.N := 5; LR^.M := LR^.N + LP^;
+  Res := LR^.M
+end;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('CASE TABLE');
+  Check(Dense(1) = 10, 1); Check(Dense(4) = 34, 2); Check(Dense(6) = 57, 3);
+  Check(Dense(8) = -1, 4); Check(Dense(12) = 120, 5); Check(Dense(0) = -1, 6);
+  Check(Dense(13) = -1, 7); Check(Dense(-5) = -1, 8); Check(Dense(-32768) = -1, 9);
+  Group('CASE CHAIN');
+  Check(Sparse(-100) = 1, 1); Check(Sparse(0) = 2, 2); Check(Sparse(1005) = 3, 3);
+  Check(Sparse(30000) = 4, 4); Check(Sparse(999) = -1, 5); Check(Sparse(1011) = -1, 6);
+  Group('CASE CHAR');
+  Check(Letter('a') = 1, 1); Check(Letter('e') = 2, 2); Check(Letter('k') = 7, 3);
+  Check(Letter('z') = 26, 4); Check(Letter('y') = 0, 5); Check(Letter('A') = 0, 6);
+  Check(Letter(#255) = 0, 7); Check(Letter(#0) = 0, 8);
+  Group('POINTERS');
+  New(P); P^ := 5; P^ := P^ + 1; Check(P^ = 6, 1);
+  New(Q); Q^ := 'x'; Check(Q^ = 'x', 2);
+  New(RP); RP^.N := 3; RP^.M := RP^.N * 2; Check(RP^.M = 6, 3);
+  New(AP); AP^[1, 2, 3] := 9; I := 2; AP^[1, I, 3] := AP^[1, I, 3] + 1; Check(AP^[1, 2, 3] = 10, 4);
+  LocalPtr(K); Check(K = 26, 5);
+  Group('INDEXES');
+  for I := 0 to 3 do for J := 1 to 5 do for K := 1 to 7 do G[I, J, K] := I * 100 + J * 10 + K;
+  I := 1; J := 2; K := 3;
+  Check(G[I + 1, J + 1, K + 2] = 235, 1); Check(G[3 - I, 5 - J, 7 - K] = 234, 2);
+  Check(G[I, J * 2, K] = 143, 3);
+  for I := 1 to 10 do A[I] := I;
+  I := 4; A[11 - I] := A[I - 1] + 100; Check(A[7] = 103, 4);
+  Group('COPY');
+  A[2] := A[9]; Check(A[2] = 9, 1);
+  I := 3; J := 5; A[I] := A[J]; Check(A[3] = 5, 2);
+  A[I + 1] := A[J + 1]; Check(A[4] = 6, 3);
+  S[1] := 'p'; S[2] := 'q'; I := 1; J := 2; S[J] := S[I]; Check(S[2] = 'p', 4);
+  Group('REAL');
+  X := 0; Check(X = 0, 1); X := 1.5; Check(X = 1.5, 2); X := -2; Check(X = -2.0, 3);
+  Y := X; Check(Y = -2.0, 4); X := 1E30; Y := X; Check(Y = 1E30, 5);
+  X := 0; X := -X; Check(X = 0, 6); X := 2.5; X := -X; Check(X = -2.5, 7); X := -X; Check(X = 2.5, 8);
+  Group('MUL CONST');
+  I := 3; Check(2 * I = 6, 1); Check(4 * I + 1 = 13, 2); Check(1024 * I = 3072, 3);
+  I := -5; Check(8 * I = -40, 4); Check(3 * I = -15, 5);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+CASE TABLE   PASS   9
+CASE CHAIN   PASS   6
+CASE CHAR    PASS   8
+POINTERS     PASS   5
+INDEXES      PASS   4
+COPY         PASS   4
+REAL         PASS   8
+MUL CONST    PASS   5
+TOTAL PASS 49 FAIL 0

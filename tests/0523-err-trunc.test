@@ -10,5 +10,5 @@ end.
 === SCREEN EXPECTED ===================================================
 before
 
-Run-time error 92, PC=001072
+Run-time error 92, PC=001066
 Program aborted

@@ -1,6 +1,8 @@
 
 #include <cassert>
 
+#include <utility>
+
 #include "main.h"
 
 // Generator: expressions and conditions, see docs/DESIGN.md sections 7.2 and 7.5.
@@ -238,12 +240,15 @@ bool Generator::GenerateBinaryValue(const ExpressionModel& expr, int index)
 
     if (op.IsSymbol(SymbolStar))
     {
-        // Multiplication by 2^k: shifts
-        const ExpressionNode& factor = expr.nodes[node.right];
+        // Multiplication by 2^k, the constant on either side: shifts
+        int factorside = node.right, valueside = node.left;
+        if (expr.nodes[node.left].isconst && !expr.nodes[node.right].isconst)
+            std::swap(factorside, valueside);
+        const ExpressionNode& factor = expr.nodes[factorside];
         int64_t k = factor.isconst ? factor.constvalue.ivalue : 0;
         if (k > 1 && k <= 16384 && (k & (k - 1)) == 0)
         {
-            if (!GenerateValue(expr, node.left))
+            if (!GenerateValue(expr, valueside))
                 return false;
             int count = 0;
             while ((1LL << count) < k)
@@ -561,6 +566,13 @@ bool Generator::GenerateCondition(const ExpressionModel& expr, int index, const 
     bool isbyte;
     if (GetSimpleOperand(expr, index, operand, isbyte) && !node.isconst)
         Emit(isbyte ? "TSTB" : "TST", operand, Operand(), node.token.text);
+    else if (IsDesignator(expr, index) && node.convert == ConvertNone && Validator::IsScalar(node.type))
+    {
+        // An element or a field: test it where it is, without loading into R0
+        if (!GenerateDesignator(expr, index, 3, operand))
+            return false;
+        Emit(Validator::TypeSize(node.type) == 1 ? "TSTB" : "TST", operand, Operand(), node.token.text);
+    }
     else
     {
         if (!GenerateValue(expr, index))

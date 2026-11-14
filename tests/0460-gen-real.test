@@ -59,5 +59,5 @@ gt eq lt TRUE FALSE
   123456.7  0.00012310000000000
   0.000000E+00   10.000
 
-Run-time error 01, PC=003232
+Run-time error 01, PC=003220
 Program aborted

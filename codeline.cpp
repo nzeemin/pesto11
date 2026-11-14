@@ -41,6 +41,7 @@ int Operand::ExtraWords() const
     case OpImmediate:
     case OpLabel:
     case OpAbsolute:
+    case OpLabelDeferred:
         return 1;
     default:
         return 0;
@@ -71,6 +72,8 @@ string Operand::ToString() const
         return LabelWithOffset(label, value);
     case OpAbsolute:
         return "@#" + FormatNumber(value & 0xFFFF);
+    case OpLabelDeferred:
+        return "@" + LabelWithOffset(label, value);
     default:
         return "";
     }

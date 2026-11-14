@@ -1,0 +1,135 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Step12;
+var I, J: Integer; C: Char; X, Y: Real; P: ^Integer;
+  A: array[1..10] of Integer; S: array[1..6] of Char;
+begin
+  case I of
+    1: J := 10; 2: J := 20; 3, 4: J := 34; 5..7: J := 57; 9: J := 90; 10: J := 100
+  else J := -1
+  end;
+  case I of
+    -100: J := 1; 0: J := 2; 1000..1010: J := 3
+  end;
+  case C of
+    'a'..'c': J := 1; 'x': J := 2
+  end;
+  P^ := 5; P^ := P^ + I;
+  A[I] := A[J]; A[I + 1] := A[J * 2];
+  X := 0; X := 2.5; Y := X;
+  ReadLn(I);
+  Write(S)
+end.
+=== MAC EXPECTED ======================================================
+	.TITLE	TEST
+	.GLOBL	FISOFF, FISON, RDINTV, RDLINE, WRCHA
+START::
+	MOV	SP, INIT$S
+	MOV	#-2, R0
+	EMT	354
+	BIC	#1, R0
+	MOV	R0, SP
+	CALL	FISON
+	MOV	V00001, R0
+	DEC	R0
+	CMP	R0, #9.
+	BHI	L00007
+	ASL	R0
+	JMP	@L00009(R0)
+L00009:
+	.WORD	L00001, L00002, L00003, L00003, L00004, L00004, L00004, L00007
+	.WORD	L00005, L00006
+L00001:
+	MOV	#10., V00002
+	BR	L00008
+L00002:
+	MOV	#20., V00002
+	BR	L00008
+L00003:
+	MOV	#34., V00002
+	BR	L00008
+L00004:
+	MOV	#57., V00002
+	BR	L00008
+L00005:
+	MOV	#90., V00002
+	BR	L00008
+L00006:
+	MOV	#100., V00002
+	BR	L00008
+L00007:
+	MOV	#-1., V00002
+L00008:
+	MOV	V00001, R0
+	CMP	R0, #-100.
+	BNE	L00015
+	MOV	#1., V00002
+	BR	L00014
+L00015:
+	TST	R0
+	BNE	L00016
+	MOV	#2., V00002
+	BR	L00014
+L00016:
+	CMP	R0, #1000.
+	BLT	L00017
+	CMP	R0, #1010.
+	BGT	L00017
+	MOV	#3., V00002
+L00017:
+L00014:
+	CLR	R0
+	BISB	V00003, R0
+	CMP	R0, #97.
+	BLT	L00022
+	CMP	R0, #99.
+	BGT	L00022
+	MOV	#1., V00002
+	BR	L00021
+L00022:
+	CMP	R0, #120.
+	BNE	L00023
+	MOV	#2., V00002
+L00023:
+L00021:
+	MOV	#5., @V00006
+	ADD	V00001, @V00006
+	MOV	V00002, R2
+	ASL	R2
+	MOV	V00001, R3
+	ASL	R3
+	MOV	V00007-2.(R2), V00007-2.(R3)
+	MOV	V00002, R3
+	ASL	R3
+	ASL	R3
+	MOV	V00007-2.(R3), -(SP)
+	MOV	V00001, R0
+	INC	R0
+	MOV	R0, R3
+	ASL	R3
+	MOV	(SP)+, V00007-2.(R3)
+	CLR	V00004
+	CLR	V00004+2.
+	MOV	#16672., V00004
+	CLR	V00004+2.
+	MOV	V00004, V00005
+	MOV	V00004+2., V00005+2.
+	CALL	RDLINE
+	CALL	RDINTV
+	.WORD	V00001
+	CALL	WRCHA
+	.WORD	V00008, 6.
+HALT::
+	CALL	FISOFF
+INIT$S = . + 2
+	MOV	#776, SP
+	EMT	350
+V00001:	.BLKW	1.
+V00002:	.BLKW	1.
+V00003:	.BLKW	1.
+V00004:	.BLKW	2.
+V00005:	.BLKW	2.
+V00006:	.BLKW	1.
+V00007:	.BLKW	10.
+V00008:	.BLKW	3.
+	.END	START

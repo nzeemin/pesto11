@@ -119,6 +119,10 @@ bool Generator::PrepareRealOperand(Operand& operand, int reg)
         Emit("MOV", Operand::Index(operand.reg, operand.value), Operand::Reg(reg));
         operand = Operand::Deferred(reg);
         return true;
+    case OpLabelDeferred:
+        Emit("MOV", Operand::Label(operand.label, operand.value), Operand::Reg(reg));
+        operand = Operand::Deferred(reg);
+        return true;
     case OpLabel:
     case OpIndex:
     case OpRegDeferred:
@@ -127,6 +131,62 @@ bool Generator::PrepareRealOperand(Operand& operand, int reg)
     default:
         return false;
     }
+}
+
+// Real constant or simple Real variable into a static variable: two MOVs, no stack
+bool Generator::GenerateRealAssignDirect(const ExpressionModel& target, const ExpressionModel& value)
+{
+    const ExpressionNode& node = value.nodes[value.root];
+    Operand dest;
+    if (!GetVariableOperand(target, target.root, dest))
+        return false;
+    if (dest.mode != OpLabel && dest.mode != OpIndex && dest.mode != OpAbsolute)
+        return false;
+    Operand destlow = dest;
+    AddOffset(destlow, 2, 3);
+    const string& name = target.nodes[target.root].token.text;
+    if (node.isconst && (node.convert == ConvertNone || node.convert == ConvertIntToReal))
+    {
+        double v = (node.convert == ConvertIntToReal) ? (double)node.constvalue.ivalue : node.constvalue.dvalue;
+        uint16_t high, low;
+        if (!RealToDecF(v, high, low))
+            return false;
+        if (high == 0)
+            Emit("CLR", dest, Operand(), name);
+        else
+            Emit("MOV", Operand::Imm((int16_t)high), dest, name);
+        if (low == 0)
+            Emit("CLR", destlow);
+        else
+            Emit("MOV", Operand::Imm((int16_t)low), destlow);
+        m_usesreal = true;
+        return true;
+    }
+    // X := -X: the sign bit in place, a zero stays a clean zero
+    if (node.kind == NodeUnary && node.token.IsSymbol(SymbolMinus) && node.convert == ConvertNone)
+    {
+        Operand inner;
+        if (!GetVariableOperand(value, node.left, inner) || inner.ToString() != dest.ToString())
+            return false;
+        string skip = NewLabel();
+        Emit("TST", dest, Operand(), name);
+        EmitBranch("BEQ", skip);
+        Emit("ADD", Operand::Imm(-32768), dest, "change the sign");
+        EmitLabel(skip);
+        m_usesreal = true;
+        return true;
+    }
+    Operand src;
+    if (node.convert != ConvertNone || !Validator::IsRealType(node.type) || !GetVariableOperand(value, value.root, src))
+        return false;
+    if (src.mode != OpLabel && src.mode != OpIndex && src.mode != OpAbsolute)
+        return false;
+    Operand srclow = src;
+    AddOffset(srclow, 2, 3);
+    Emit("MOV", src, dest, name);
+    Emit("MOV", srclow, destlow);
+    m_usesreal = true;
+    return true;
 }
 
 // The Real on the stack into the variable

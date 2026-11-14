@@ -10,5 +10,5 @@ end.
 === SCREEN EXPECTED ===================================================
 before
 
-Run-time error 04, PC=001066
+Run-time error 04, PC=001062
 Program aborted

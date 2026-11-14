@@ -940,6 +940,7 @@ enum OperandMode
     OpImmediate,        // #n or #label
     OpLabel,            // label or label+n (PC relative)
     OpAbsolute,         // @#n
+    OpLabelDeferred,    // @label or @label+n: the word at the label holds the address (pointer variable)
 };
 
 struct Operand
@@ -957,6 +958,7 @@ public:
     static Operand Label(const string& label, int64_t offset = 0) { Operand op; op.mode = OpLabel; op.label = label; op.value = offset; return op; }
     static Operand Index(int reg, int64_t offset) { Operand op; op.mode = OpIndex; op.reg = reg; op.value = offset; return op; }
     static Operand IndexDeferred(int reg, int64_t offset) { Operand op; op.mode = OpIndexDeferred; op.reg = reg; op.value = offset; return op; }
+    static Operand LabelDeferred(const string& label, int64_t offset = 0) { Operand op; op.mode = OpLabelDeferred; op.label = label; op.value = offset; return op; }
     static Operand Deferred(int reg) { Operand op; op.mode = OpRegDeferred; op.reg = reg; return op; }
     static Operand AutoInc(int reg) { Operand op; op.mode = OpAutoInc; op.reg = reg; return op; }
     static Operand AutoDec(int reg) { Operand op; op.mode = OpAutoDec; op.reg = reg; return op; }
@@ -1118,6 +1120,9 @@ private:
     bool GenerateIndex(const ExpressionModel& expr, int argnode, int reg, int64_t low, int64_t high, int size, bool check, Operand& operand);
     bool AddOffset(Operand& operand, int64_t offset, int reg);
     void ScaleRegister(int reg, int size);
+    bool IsRegisterSafeIndex(const ExpressionModel& expr, int index);
+    bool IsSimpleDesignator(const ExpressionModel& expr, int index);
+    bool GetStaticOperand(const ExpressionModel& expr, int index, Operand& operand);
     void LoadAddress(const Operand& operand, int reg);
     void PushAddress(const Operand& operand, const string& comment);
     bool GenerateAddress(const ExpressionModel& expr, int index, int reg);
@@ -1171,6 +1176,7 @@ private:
     void EmitFis(const char* opcode);
     bool GenerateReal(const ExpressionModel& expr, int index);
     bool PrepareRealOperand(Operand& operand, int reg);
+    bool GenerateRealAssignDirect(const ExpressionModel& target, const ExpressionModel& value);
     bool StoreReal(const ExpressionModel& target, int index);
     bool GenerateRealCompare(const ExpressionModel& expr, int index, const string& label, bool jumpiftrue);
     bool GenerateRealFunction(const string& name, const ExpressionModel& expr, int index);

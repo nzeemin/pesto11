@@ -236,6 +236,10 @@ bool Generator::AddOffset(Operand& operand, int64_t offset, int reg)
         Emit("MOV", Operand::Index(operand.reg, operand.value), Operand::Reg(reg));
         operand = Operand::Index(reg, offset);
         return true;
+    case OpLabelDeferred:
+        Emit("MOV", Operand::Label(operand.label, operand.value), Operand::Reg(reg));
+        operand = Operand::Index(reg, offset);
+        return true;
     default:
         return false;
     }
@@ -264,9 +268,101 @@ void Generator::ScaleRegister(int reg, int size)
         Emit("MUL", Operand::Imm(size), Operand::Reg(reg), "element size");
         return;
     }
+    if (size == 256 || size == 512 || size == 1024)
+    {
+        // An even register gets no MUL result in itself: the high byte by SWAB is shorter
+        Emit("SWAB", Operand::Reg(reg));
+        Emit("CLRB", Operand::Reg(reg));
+        for (int s = 256; s < size; s *= 2)
+            Emit("ASL", Operand::Reg(reg));
+        return;
+    }
     Emit("MOV", Operand::Reg(reg), Operand::Reg(1));
     Emit("MUL", Operand::Imm(size), Operand::Reg(1), "element size");
     Emit("MOV", Operand::Reg(1), Operand::Reg(reg));
+}
+
+// Operand that needs no code: a variable (GetVariableOperand) or p^ with the pointer in a static place
+bool Generator::GetStaticOperand(const ExpressionModel& expr, int index, Operand& operand)
+{
+    if (GetVariableOperand(expr, index, operand))
+        return true;
+    const ExpressionNode& node = expr.nodes[index];
+    if (node.kind != NodeDeref || !Validator::IsPointerType(expr.nodes[node.left].type))
+        return false;
+    Operand pointer;
+    if (!GetVariableOperand(expr, node.left, pointer))
+        return false;
+    if (pointer.mode == OpLabel)
+    {
+        operand = Operand::LabelDeferred(pointer.label, pointer.value);
+        return true;
+    }
+    if (pointer.mode == OpIndex && pointer.label.empty())
+    {
+        operand = Operand::IndexDeferred(pointer.reg, pointer.value);
+        return true;
+    }
+    return false;
+}
+
+// The designator code uses only its own register and R0, R1: no index needs a computed value
+bool Generator::IsSimpleDesignator(const ExpressionModel& expr, int index)
+{
+    Operand operand;
+    if (GetVariableOperand(expr, index, operand))
+        return true;
+    const ExpressionNode& node = expr.nodes[index];
+    switch (node.kind)
+    {
+    case NodeField:
+        return IsSimpleDesignator(expr, node.left);
+    case NodeIndex:
+        {
+            if (IsMemArray(expr, node.left) || !IsSimpleDesignator(expr, node.left))
+                return false;
+            for (const ArgModel& arg : node.args)
+            {
+                bool isbyte;
+                if (!GetSimpleOperand(expr, arg.node, operand, isbyte))
+                    return false;
+            }
+            return true;
+        }
+    case NodeDeref:
+        return Validator::IsPointerType(expr.nodes[node.left].type) && GetVariableOperand(expr, node.left, operand);
+    default:
+        return false;
+    }
+}
+
+// The index expression is computed in R0..R2 only: constants, simple variables and arithmetic on them.
+// Then the base address can stay in R3 meanwhile.
+bool Generator::IsRegisterSafeIndex(const ExpressionModel& expr, int index)
+{
+    if (index < 0)
+        return false;
+    const ExpressionNode& node = expr.nodes[index];
+    Operand operand;
+    bool isbyte;
+    if (GetSimpleOperand(expr, index, operand, isbyte))
+        return true;
+    if (node.convert != ConvertNone || !Validator::IsScalar(node.type))
+        return false;
+    if (node.kind == NodeUnary)
+        return (node.token.IsSymbol(SymbolMinus) || node.token.IsKeyword(KeywordNOT)) &&
+            !Validator::IsBooleanType(node.type) && IsRegisterSafeIndex(expr, node.left);
+    if (node.kind == NodeBinary)
+    {
+        const Token& op = node.token;
+        if (Validator::IsBooleanType(node.type))
+            return false;
+        bool shift = op.IsKeyword(KeywordSHL) || op.IsKeyword(KeywordSHR);
+        if (shift && !expr.nodes[node.right].isconst)
+            return false;  // ISHL/ISHR in the runtime
+        return IsRegisterSafeIndex(expr, node.left) && IsRegisterSafeIndex(expr, node.right);
+    }
+    return false;
 }
 
 // Operand of a variable designator, the address code goes into reg (see the top of the file)
@@ -305,6 +401,20 @@ bool Generator::GenerateDesignator(const ExpressionModel& expr, int index, int r
             if (!Validator::IsPointerType(expr.nodes[node.left].type))
                 return false;  // File buffer variable: step 9
             Operand pointer;
+            if (GetVariableOperand(expr, node.left, pointer))
+            {
+                // A pointer in a static place: the deferred operand needs no register
+                if (pointer.mode == OpLabel)
+                {
+                    operand = Operand::LabelDeferred(pointer.label, pointer.value);
+                    return true;
+                }
+                if (pointer.mode == OpIndex && pointer.label.empty())
+                {
+                    operand = Operand::IndexDeferred(pointer.reg, pointer.value);
+                    return true;
+                }
+            }
             if (IsDesignator(expr, node.left))
             {
                 if (!GenerateDesignator(expr, node.left, reg, pointer))
@@ -418,6 +528,11 @@ bool Generator::GenerateIndex(const ExpressionModel& expr, int argnode, int reg,
         offset = -low * size;
         label.clear();
         break;
+    case OpLabelDeferred:
+        Emit("MOV", Operand::Label(operand.label, operand.value), Operand::Reg(reg));
+        offset = -low * size;
+        label.clear();
+        break;
     case OpRegDeferred:
         if (operand.reg != reg)
             Emit("MOV", Operand::Reg(operand.reg), Operand::Reg(reg));
@@ -435,6 +550,30 @@ bool Generator::GenerateIndex(const ExpressionModel& expr, int argnode, int reg,
         LoadOrdinal(expr, argnode, 1);
         ScaleRegister(1, size);
         Emit("ADD", Operand::Reg(1), Operand::Reg(reg));
+    }
+    else if (reg == 3 && IsRegisterSafeIndex(expr, argnode))
+    {
+        // The base stays in R3, the index is computed in R0
+        if (!GenerateValue(expr, argnode))
+            return false;
+        if (check)
+        {
+            EmitCall("RNGCHK", "index check, error 90");
+            EmitData(".WORD", FormatNumber(low) + ", " + FormatNumber(high), 2);
+        }
+        bool shifts = size == 1 || size == 2 || size == 4 || size == 8 || size == 16 ||
+            size == 256 || size == 512 || size == 1024;
+        if (!shifts)
+        {
+            Emit("MOV", Operand::Reg(0), Operand::Reg(1));
+            Emit("MUL", Operand::Imm(size), Operand::Reg(1), "element size");
+            Emit("ADD", Operand::Reg(1), Operand::Reg(reg));
+        }
+        else
+        {
+            ScaleRegister(0, size);
+            Emit("ADD", Operand::Reg(0), Operand::Reg(reg));
+        }
     }
     else
     {
@@ -471,6 +610,9 @@ void Generator::LoadAddress(const Operand& operand, int reg)
     case OpIndexDeferred:
         Emit("MOV", Operand::Index(operand.reg, operand.value), Operand::Reg(reg));
         break;
+    case OpLabelDeferred:
+        Emit("MOV", Operand::Label(operand.label, operand.value), Operand::Reg(reg));
+        break;
     case OpRegDeferred:
         if (operand.reg != reg)
             Emit("MOV", Operand::Reg(operand.reg), Operand::Reg(reg));
@@ -502,6 +644,9 @@ void Generator::PushAddress(const Operand& operand, const string& comment)
         break;
     case OpIndexDeferred:
         Emit("MOV", Operand::Index(operand.reg, operand.value), Operand::AutoDec(6), comment);
+        break;
+    case OpLabelDeferred:
+        Emit("MOV", Operand::Label(operand.label, operand.value), Operand::AutoDec(6), comment);
         break;
     case OpRegDeferred:
         Emit("MOV", Operand::Reg(operand.reg), Operand::AutoDec(6), comment);

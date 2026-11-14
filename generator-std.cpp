@@ -58,6 +58,16 @@ bool Generator::GenerateWriteItem(const ExpressionModel& expr, const ArgModel& a
             EmitCall("WRSTRW");
             return true;
         }
+        Operand array;
+        if (node.convert == ConvertArrayToString && !haswidth && GetVariableOperand(expr, arg.node, array) &&
+            array.mode == OpLabel)
+        {
+            // A static array of Char: its address and length after the call, no string buffer
+            EmitCall("WRCHA", "Write " + expr.NodeToString(arg.node));
+            EmitData(".WORD", LabelWithOffset(array.label, array.value) + ", " +
+                FormatNumber(Validator::TypeSize(node.type)), 2);
+            return true;
+        }
         std::vector<RuntimeArg> args;
         args.push_back(RuntimeArg(RuntimeArg::StringValue, arg.node, 0));
         if (haswidth)
@@ -489,6 +499,7 @@ bool Generator::GenerateReadItems(const ExpressionModel& expr, int index, size_t
     {
         int arg = args[i].node;
         int type = expr.nodes[arg].type;
+        Operand varop;
         if (Validator::IsCharType(type))
         {
             EmitCall("RDCH");
@@ -515,6 +526,14 @@ bool Generator::GenerateReadItems(const ExpressionModel& expr, int index, size_t
             if (!StoreReal(expr, arg))
                 return false;
             EmitLabel(skip);
+        }
+        else if (Validator::IsOrdinal(type) && Validator::IsIntegerType(type) &&
+                 Validator::GetType(type).kind != TypeKindSubrange && Validator::GetType(type).kind != TypeKindByte &&
+                 GetVariableOperand(expr, arg, varop) && varop.mode == OpLabel)
+        {
+            // A static Integer variable: its address after the call, the runtime stores the number
+            EmitCall("RDINTV", "Read " + expr.nodes[arg].token.text);
+            EmitData(".WORD", LabelWithOffset(varop.label, varop.value), 1);
         }
         else if (Validator::IsOrdinal(type))
         {
