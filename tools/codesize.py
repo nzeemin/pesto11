@@ -65,13 +65,25 @@ def count(lst, ours):
         res[cur] = res.get(cur, 0) + words
     return sum(v for k, v in res.items() if k != 'DATA' and k not in EXCLUDE)
 
+def runtime_words(lst):
+    """Words of the runtime module: code and initialized data (tables), .BLKW not counted"""
+    total = 0
+    for l in open(lst, 'rb').read().decode('koi8-r', 'replace').replace(chr(13), '').split(chr(10)):
+        m = LINE.match(l)
+        if m:
+            total += len(m.group(2).split())
+    return total
+
 def ours(path):
+    """Code words of the program and words of its runtime"""
     work = tempfile.mkdtemp()
     try:
         shutil.copy(path, work)
         name = os.path.basename(path)
         subprocess.run([COMPILER, '-q', name], cwd=work, check=True)
-        return count(assemble(os.path.join(work, os.path.splitext(name)[0] + '.MAC'), work), True)
+        code = count(assemble(os.path.join(work, os.path.splitext(name)[0] + '.MAC'), work), True)
+        runtime = runtime_words(assemble(os.path.join(work, 'PESTO.MAC'), work))
+        return code, runtime
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
@@ -120,16 +132,17 @@ programs = [
     ('tpk', os.path.join(ROOT, 'examples', 'tpk', 'TPK.PAS'), None),
 ]
 omsidir = sys.argv[1] if len(sys.argv) > 1 else None
-sumours = sumomsi = 0
+sumours = sumomsi = sumruntime = 0
 for name, src, macs in programs:
-    a = ours(src)
+    a, runtime = ours(src)
+    sumruntime += runtime
     if omsidir:
         if macs is None:
             work = tempfile.mkdtemp()
             try:
                 mac = omsi_compile(src, omsidir, work)
                 if mac is None:
-                    print('%-8s Pesto/11 %6d  (OMSI Pascal not available)' % (name, a))
+                    print('%-8s Pesto/11 %6d  (OMSI Pascal not available)  runtime %5d' % (name, a, runtime))
                     continue
                 b = omsi([mac])
             finally:
@@ -138,8 +151,8 @@ for name, src, macs in programs:
             b = omsi([os.path.join(omsidir, m) for m in macs])
         sumours += a
         sumomsi += b
-        print('%-8s Pesto/11 %6d  OMSI %6d  %5.1f%%' % (name, a, b, 100.0 * a / b))
+        print('%-8s Pesto/11 %6d  OMSI %6d  %5.1f%%  runtime %5d' % (name, a, b, 100.0 * a / b, runtime))
     else:
-        print('%-8s Pesto/11 %6d' % (name, a))
+        print('%-8s Pesto/11 %6d  runtime %5d' % (name, a, runtime))
 if omsidir:
-    print('%-8s Pesto/11 %6d  OMSI %6d  %5.1f%%' % ('total', sumours, sumomsi, 100.0 * sumours / sumomsi))
+    print('%-8s Pesto/11 %6d  OMSI %6d  %5.1f%%  runtime %5d' % ('total', sumours, sumomsi, 100.0 * sumours / sumomsi, sumruntime))

@@ -1,0 +1,67 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+var I, J, K, Errs: Integer; X, Y, Z: Real;
+  Count: array[0..9] of Integer;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('SEQUENCE');
+  { The state starts at 0: Seed := Seed * 134775813 + 1, as in TP4-7 }
+  X := Random; Y := Random; Z := Random;
+  Check((X > 0) and (X < 1E-9), 1); Check(Abs(Y - 0.03137994) < 1E-6, 2); Check(Abs(Z - 0.8610485) < 1E-6, 3);
+  Check(Random(1000) = 202, 4); Check(Random(1000) = 272, 5); Check(Random(1000) = 671, 6);
+  Check(Random(1000) = 318, 7); Check(Random(1000) = 161, 8); Check(Random(1000) = 372, 9);
+  Check(Random(1000) = 425, 10); Check(Random(1000) = 82, 11);
+  Group('RANGE');
+  for I := 0 to 9 do Count[I] := 0;
+  Errs := 0;
+  for I := 1 to 2000 do
+  begin
+    J := Random(10);
+    if (J < 0) or (J > 9) then Errs := Errs + 1 else Count[J] := Count[J] + 1
+  end;
+  Check(Errs = 0, 1);
+  K := 0; for I := 0 to 9 do if (Count[I] < 150) or (Count[I] > 250) then K := K + 1;
+  Check(K = 0, 2);
+  Check(Random(1) = 0, 3); Check(Random(0) = 0, 4); Check(Random(-5) = 0, 5);
+  Errs := 0; for I := 1 to 200 do begin J := Random(30000); if (J < 0) or (J >= 30000) then Errs := Errs + 1 end;
+  Check(Errs = 0, 6);
+  Errs := 0; for I := 1 to 200 do begin X := Random; if (X < 0) or (X >= 1) then Errs := Errs + 1 end;
+  Check(Errs = 0, 7);
+  Group('RANDOMIZE');
+  Randomize; Errs := 0;
+  for I := 1 to 100 do begin J := Random(6); if (J < 0) or (J > 5) then Errs := Errs + 1 end;
+  Check(Errs = 0, 1);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+SEQUENCE     PASS  11
+RANGE        PASS   7
+RANDOMIZE    PASS   1
+TOTAL PASS 19 FAIL 0

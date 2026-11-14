@@ -482,7 +482,7 @@ selector           ::= "[" expression { "," expression } "]" | "." field-identif
 | `Delay(мс)` | да |
 | `FillChar`, `Move` | да |
 | `Halt`, `Exit` | да |
-| `Randomize`, `Random`, `Random(n)` | да |
+| `Randomize`, `Random`, `Random(n)` | да; **[P11]** генератор — линейный конгруэнтный TP4–TP7 (`Seed * 134775813 + 1`, 32 бита): генератор TP3 в руководстве не описан, а последовательность Real TP3 (6 байт) всё равно не повторить |
 | `Addr` | да |
 | `SizeOf` | да |
 | `Hi`, `Lo`, `Swap` | да |

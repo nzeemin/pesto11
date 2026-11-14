@@ -205,8 +205,7 @@ bool Generator::GenerateStdFunction(const ExpressionModel& expr, int index)
     {
         if (!LoadOrdinal(expr, node.args[0].node, 0))
             return false;
-        EmitCall("FRNDI", "Random(N)");
-        m_usesreal = true;
+        EmitCall("RANDI", "Random(N)");
         return true;
     }
     if (node.args.size() != 1)

@@ -221,8 +221,7 @@ bool Generator::GenerateRealFunction(const string& name, const ExpressionModel& 
     const ExpressionNode& node = expr.nodes[index];
     if (name == "Random" && node.args.empty())
     {
-        PushRealConst(1.0);  // FRND: a positive parameter gives the next number
-        EmitCall("FRND", "Random");
+        EmitCall("RANDR", "Random");
         return true;
     }
     if (node.args.size() != 1)
