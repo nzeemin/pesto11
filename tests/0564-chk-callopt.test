@@ -1,0 +1,160 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+type Color = (Red, Green, Blue);
+  Small = 1..10;
+  PInt = ^Integer;
+var I, J, K: Integer; B: Byte; C: Char; X, Y: Real; S1, S2: string[10];
+  Q: PInt; W: Integer;
+{ Function results straight in R0 }
+function Twice(N: Integer): Integer;
+begin
+  Twice := N + N
+end;
+function Seven: Integer;
+begin
+  Seven := 7
+end;
+function NextByte(V: Byte): Byte;
+begin
+  NextByte := V + 1
+end;
+function Upper(Ch: Char): Char;
+begin
+  if (Ch >= 'a') and (Ch <= 'z') then Ch := Chr(Ord(Ch) - 32);
+  Upper := Ch
+end;
+function IsPos(N: Integer): Boolean;
+begin
+  IsPos := N > 0
+end;
+function Succ3(Cl: Color): Color;
+begin
+  if Cl = Blue then Cl := Red else Cl := Succ(Cl);
+  Succ3 := Cl
+end;
+function Fact(N: Integer): Integer;
+begin
+  if N <= 1 then Fact := 1 else Fact := N * Fact(N - 1)
+end;
+function Fib(N: Integer): Integer;
+var A, B2, T, K2: Integer;
+begin
+  A := 0; B2 := 1;
+  for K2 := 1 to N do begin T := A + B2; A := B2; B2 := T end;
+  Fib := A
+end;
+function Early(N: Integer): Integer;
+begin
+  Early := -1;
+  if N < 0 then Exit;
+  Early := N * 3
+end;
+function Same(P: PInt): PInt;
+begin
+  Same := P
+end;
+function Clip(N: Integer): Small;
+begin
+  if N < 1 then N := 1;
+  if N > 10 then N := 10;
+  Clip := N
+end;
+function Outer(N: Integer): Integer;
+  function Inner: Integer;
+  begin
+    Inner := N + 1
+  end;
+begin
+  Outer := Inner * 2
+end;
+function Twice2(N: Integer): Integer;
+begin
+  Twice2 := N;
+  if N > 5 then Twice2 := N * 2
+end;
+{ Boolean arguments straight on the stack }
+function Count3(A, B3, C3: Boolean): Integer;
+var N: Integer;
+begin
+  N := 0;
+  if A then N := N + 1;
+  if B3 then N := N + 1;
+  if C3 then N := N + 1;
+  Count3 := N
+end;
+function BoolNum(A: Boolean; N: Integer; B3: Boolean): Integer;
+begin
+  BoolNum := Ord(A) * 100 + N * 10 + Ord(B3)
+end;
+function Depth(Go: Boolean; N: Integer): Integer;
+begin
+  if Go then Depth := Depth(N > 1, N - 1) + 1 else Depth := 0
+end;
+procedure SetVar(V: Boolean; var R: Boolean);
+begin
+  R := V
+end;
+var Bo: Boolean;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('RESULT R0');
+  Check(Twice(21) = 42, 1); Check(Seven = 7, 2); Check(Twice(Seven) = 14, 3);
+  Check(NextByte(5) = 6, 4); B := 255; Check(NextByte(B) = 0, 5);
+  Check(Upper('q') = 'Q', 6); Check(Upper('Q') = 'Q', 7);
+  C := Upper('a'); Check(Ord(C) = 65, 8);
+  Check(IsPos(5), 9); Check(not IsPos(-5), 10); Check(IsPos(0) = False, 11);
+  Check(Succ3(Red) = Green, 12); Check(Succ3(Blue) = Red, 13);
+  Check(Fact(7) = 5040, 14); Check(Fib(20) = 6765, 15);
+  Check(Early(5) = 15, 16); Check(Early(-2) = -1, 17);
+  New(Q); Q^ := 99; Check(Same(Q)^ = 99, 18); Check(Same(nil) = nil, 19);
+  Check(Clip(-4) = 1, 20); Check(Clip(50) = 10, 21); Check(Clip(6) = 6, 22);
+  Check(Outer(4) = 10, 23); Check(Twice2(9) = 18, 24); Check(Twice2(3) = 3, 26);
+  J := Twice(3) + Twice(4) * Seven; Check(J = 62, 25);
+  Group('BOOL ARGS');
+  I := 5; J := 7;
+  Check(Count3(I < J, I = J, I > J) = 1, 1);
+  Check(Count3(I <> J, (I > 0) and (J > 0), (I > 9) or (J > 6)) = 3, 2);
+  Check(Count3(not (I < J), not (I > J), I in [1..5]) = 2, 3);
+  X := 1.5; Y := 2.5; Check(Count3(X < Y, X = Y, X + 1 = Y) = 2, 4);
+  S1 := 'ABC'; S2 := 'ABD'; Check(Count3(S1 < S2, S1 = S2, S1 + 'X' > S2) = 1, 5);
+  Check(BoolNum(I < J, 4, I > J) = 140, 6); Check(BoolNum(I > J, 3, J > I) = 31, 7);
+  Check(Count3(IsPos(I), IsPos(-I), IsPos(I) and IsPos(J)) = 2, 8);
+  Check(Count3(Twice(I) = 10, Fact(3) = 6, Seven <> 7) = 2, 9);
+  Check(Depth(True, 5) = 5, 10); Check(Depth(I > J, 5) = 0, 11);
+  SetVar(I < J, Bo); Check(Bo, 12); SetVar(I > J, Bo); Check(not Bo, 13);
+  W := MemAvail; Check(Count3(MemAvail = W, MaxAvail <> 0, False) = 2, 14);
+  K := 0; for I := 1 to 10 do K := K + Count3(Odd(I), I > 5, I mod 3 = 0);
+  Check(K = 13, 15);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+RESULT R0    PASS  26
+BOOL ARGS    PASS  15
+TOTAL PASS 41 FAIL 0

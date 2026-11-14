@@ -73,8 +73,41 @@ bool RuntimeGenerator::LoadTemplate(const std::filesystem::path& path)
     {
         while (!item.lines.empty() && item.lines.back().empty())
             item.lines.pop_back();
+        item.inputregs = ParseInputRegisters(item);
     }
     return true;
+}
+
+// Registers R0..R4 named in the "Вход:" comment of the block, up to "Выход" or "Портит" on that line;
+// -1 if the block has no such comment. The template is in KOI8-R.
+int RuntimeGenerator::ParseInputRegisters(const RuntimeBlock& block)
+{
+    static const char input[] = "\xF7\xC8\xCF\xC4:";            // "Вход:" in KOI8-R
+    static const char output[] = "\xF7\xD9\xC8\xCF\xC4";        // "Выход"
+    static const char spoils[] = "\xF0\xCF\xD2\xD4\xC9\xD4";    // "Портит"
+    for (const string& line : block.lines)
+    {
+        if (line.empty() || line[0] != ';')
+            continue;
+        size_t start = line.find(input);
+        if (start == string::npos)
+            continue;
+        size_t end = std::min(line.find(output, start), line.find(spoils, start));
+        string text = line.substr(start, end == string::npos ? string::npos : end - start);
+        int mask = 0;
+        for (size_t i = 0; i + 1 < text.size(); i++)
+        {
+            if (text[i] != 'R' || text[i + 1] < '0' || text[i + 1] > '4')
+                continue;
+            int first = text[i + 1] - '0', last = first;
+            if (i + 4 < text.size() && text[i + 2] == '-' && text[i + 3] == 'R' && text[i + 4] >= '0' && text[i + 4] <= '4')
+                last = text[i + 4] - '0';  // R1-R3
+            for (int r = first; r <= last; r++)
+                mask |= 1 << r;
+        }
+        return mask;
+    }
+    return -1;
 }
 
 const RuntimeBlock* RuntimeGenerator::FindBlock(const string& name) const

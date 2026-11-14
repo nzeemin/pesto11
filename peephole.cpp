@@ -132,9 +132,10 @@ static string StripColons(const string& label)
 class Peephole
 {
     std::vector<CodeLine>& m_lines;
+    const RuntimeGenerator* m_runtime;    // Input registers of the runtime routines
     std::map<string, size_t> m_labels;  // Label -> index of its line
 public:
-    explicit Peephole(std::vector<CodeLine>& lines) : m_lines(lines) {}
+    Peephole(std::vector<CodeLine>& lines, const RuntimeGenerator* runtime) : m_lines(lines), m_runtime(runtime) {}
     void Run();
 private:
     typedef bool (Peephole::*Method)(size_t i);
@@ -149,6 +150,7 @@ private:
     void   Remove(size_t i);
     // Analysis
     int    RegisterUse(const CodeLine& line, int reg) const;
+    bool   CallReads(const CodeLine& line, int reg) const;
     bool   IsRegDead(size_t start, int reg, std::set<size_t>& visited) const;
     bool   IsRegDeadAfter(size_t i, int reg) const;
     bool   FlagsRead(size_t start, int mask, std::set<size_t>& visited) const;
@@ -275,9 +277,25 @@ int Peephole::RegisterUse(const CodeLine& line, int reg) const
     return 0;
 }
 
+// Whether a CALL reads the register: a Pascal procedure reads only R4 (the static link), a runtime
+// routine the registers of its "input" comment; unknown routines read all of them
+bool Peephole::CallReads(const CodeLine& line, int reg) const
+{
+    if (line.src.mode != OpLabel)
+        return true;
+    const string& name = line.src.label;
+    if (name.size() == 6 && name[0] == 'P' && name.find_first_not_of("0123456789", 1) == string::npos)
+        return reg == 4;
+    const RuntimeBlock* block = (m_runtime != nullptr) ? m_runtime->FindBlock(name) : nullptr;
+    if (block == nullptr || block->inputregs < 0)
+        return true;
+    return (block->inputregs & (1 << reg)) != 0;
+}
+
 // The register is not read before it is written, on every path from the line on
 bool Peephole::IsRegDead(size_t start, int reg, std::set<size_t>& visited) const
 {
+    bool aftercall = false;
     for (size_t i = start; i < m_lines.size(); i++)
     {
         const CodeLine& line = m_lines[i];
@@ -286,8 +304,11 @@ bool Peephole::IsRegDead(size_t start, int reg, std::set<size_t>& visited) const
         case LineComment:
         case LineLabel:
             continue;
-        case LineRaw:
         case LineData:
+            if (aftercall)
+                continue;  // Arguments after CALL, like .WORD Knnnnn of WRSTRI: not executed
+            return false;
+        case LineRaw:
             return false;
         case LineBranch:
             {
@@ -305,7 +326,17 @@ bool Peephole::IsRegDead(size_t start, int reg, std::set<size_t>& visited) const
         }
         if (line.opcode == "RETURN")
             return reg != 0;  // R0 is a function result
-        if (line.opcode == "CALL" || line.opcode == "JMP" || !line.text.empty())
+        if (line.opcode == "CALL")
+        {
+            // The routine clobbers registers but never keeps a value for the code after it,
+            // so only its inputs matter; the scan goes on after the call
+            if (CallReads(line, reg))
+                return false;
+            aftercall = true;
+            continue;
+        }
+        aftercall = false;
+        if (line.opcode == "JMP" || !line.text.empty())
             return false;
         int use = RegisterUse(line, reg);
         if (use < 0 || use == 1)
@@ -354,6 +385,8 @@ bool Peephole::FlagsRead(size_t start, int mask, std::set<size_t>& visited) cons
         }
         if (line.opcode == "CALL")
             return false;  // The callee determines the flags
+        if (line.opcode == "RETURN" && line.text.empty())
+            return false;  // Callers of Pascal routines never test the flags after CALL
         if (line.opcode == "RETURN" || line.opcode == "JMP" || !line.text.empty())
             return true;
         const string& op = line.opcode;
@@ -834,9 +867,9 @@ bool Peephole::RemoveUnusedLabels()
     return removed;
 }
 
-void OptimizeCode(ProcedureCode& code)
+void OptimizeCode(ProcedureCode& code, const RuntimeGenerator* runtime)
 {
-    Peephole peephole(code.lines);
+    Peephole peephole(code.lines, runtime);
     peephole.Run();
 }
 

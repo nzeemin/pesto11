@@ -23,7 +23,7 @@ static string MakeLabel(char prefix, int number)
 Generator::Generator(FinalModel* final, const RuntimeGenerator* runtime) :
     m_final(final), m_runtime(runtime), m_code(nullptr), m_procindex(0),
     m_labelcount(0), m_gotocount(0), m_stringcount(0), m_lastfile(-1), m_lastline(0), m_setrangetype(-1),
-    m_usesreal(false), m_initend(0)
+    m_usesreal(false), m_initend(0), m_resultinr0(-1)
 {
     assert(final != nullptr);
     assert(runtime != nullptr);
@@ -216,6 +216,76 @@ void Generator::GenerateProgram()
     GenerateData();
 }
 
+// References to a symbol in the expressions of a statement tree; asm operands count too
+static int CountSymbolRefs(const StatementModel& statement, int symbol)
+{
+    int count = 0;
+    auto expr = [&](const ExpressionModel& model)
+    {
+        for (const ExpressionNode& node : model.nodes)
+        {
+            if (node.symbol == symbol)
+                count++;
+        }
+    };
+    expr(statement.target);
+    expr(statement.expr);
+    expr(statement.expr2);
+    for (const ExpressionModel& model : statement.withvars)
+        expr(model);
+    for (const StatementModel& child : statement.statements)
+        count += CountSymbolRefs(child, symbol);
+    for (const CaseElementModel& element : statement.caseelements)
+    {
+        for (const StatementModel& child : element.statement)
+            count += CountSymbolRefs(child, symbol);
+    }
+    for (const AsmLineModel& line : statement.asmlines)
+    {
+        for (const AsmNameModel& name : line.names)
+        {
+            if (name.symbol == symbol)
+                count++;
+        }
+    }
+    return count;
+}
+
+// The function result can be computed straight into R0 instead of its slot: an ordinal or pointer
+// result, assigned once by the last statement of the body and used nowhere else, no nested
+// procedures, no range check on the assignment. See docs/DESIGN.md section 7.3.
+bool Generator::IsResultInR0(int procindex)
+{
+    const ProcedureModel& proc = g_program.procedures[procindex];
+    if (proc.kind != ProcKindFunction || proc.resultsymbol < 0)
+        return false;
+    const SymbolModel& result = g_program.symbols[proc.resultsymbol];
+    if (!Validator::IsScalar(result.type) || Validator::IsRealType(result.type) || Validator::IsStringType(result.type))
+        return false;
+    for (const ProcedureModel& other : g_program.procedures)
+    {
+        if (other.parent == procindex)
+            return false;
+    }
+    const std::vector<StatementModel>& body = proc.block.body.statements;
+    size_t last = body.size();
+    while (last > 0 && body[last - 1].kind == StmtEmpty && body[last - 1].labelsymbol < 0)
+        last--;
+    if (last == 0)
+        return false;
+    const StatementModel& final = body[last - 1];
+    if (final.kind != StmtAssign || final.labelsymbol >= 0 || final.target.root < 0)
+        return false;
+    const ExpressionNode& target = final.target.nodes[final.target.root];
+    if (target.kind != NodeIdent || target.symbol != proc.resultsymbol)
+        return false;
+    const TypeModel& model = Validator::GetType(result.type);
+    if ((target.token.directives & DirectiveR) != 0 &&
+        (model.kind == TypeKindSubrange || model.kind == TypeKindEnum || model.kind == TypeKindByte))
+        return false;  // The assignment checks the range
+    return CountSymbolRefs(proc.block.body, proc.resultsymbol) == 1;
+}
+
 void Generator::GenerateProcedure(int procindex)
 {
     m_final->procedures.push_back(ProcedureCode());
@@ -234,7 +304,7 @@ void Generator::GenerateProcedure(int procindex)
         GenerateStatement(proc.block.body);
         EmitTemplateBlock("TERM");
         if (!g_noopt)
-            OptimizeCode(*m_code);
+            OptimizeCode(*m_code, m_runtime);
         LayoutBranches(*m_code);
         return;
     }
@@ -258,13 +328,18 @@ void Generator::GenerateProcedure(int procindex)
         if (other.parent == procindex)
             haschildren = true;
     }
-    bool needframe = proc.paramsize > 0 || proc.localsize > 0 || proc.nested || haschildren;
+    // A result computed straight into R0 needs no slot: when it is the last local, the frame shrinks
+    m_resultinr0 = IsResultInR0(procindex) ? proc.resultsymbol : -1;
+    int localsize = proc.localsize;
+    if (m_resultinr0 >= 0 && -g_program.symbols[m_resultinr0].location.offset == localsize)
+        localsize -= 2;
+    bool needframe = proc.paramsize > 0 || localsize > 0 || proc.nested || haschildren;
 
     if (needframe)
     {
         Emit("MOV", Operand::Reg(5), Operand::AutoDec(6), "save the caller frame");
         Emit("MOV", Operand::Reg(6), Operand::Reg(5), "new frame");
-        int locals = proc.localsize;
+        int locals = localsize;
         if (proc.nested)
         {
             Emit("MOV", Operand::Reg(4), Operand::AutoDec(6), "static link -> -2(R5)");
@@ -318,7 +393,7 @@ void Generator::GenerateProcedure(int procindex)
     EmitLabel(m_exitlabel);
 
     // Function result into R0
-    if (proc.kind == ProcKindFunction && proc.resultsymbol >= 0)
+    if (proc.kind == ProcKindFunction && proc.resultsymbol >= 0 && m_resultinr0 < 0)
     {
         const SymbolModel& result = g_program.symbols[proc.resultsymbol];
         if (Validator::IsStringType(result.type) || Validator::IsRealType(result.type))
@@ -337,7 +412,7 @@ void Generator::GenerateProcedure(int procindex)
     // Epilogue: restore the caller frame, pop the parameters (DESIGN 7.3)
     if (needframe)
     {
-        if (proc.localsize > 0)
+        if (localsize > 0)
             Emit("MOV", Operand::Reg(5), Operand::Reg(6));  // Without locals SP is already at R5
         Emit("MOV", Operand::AutoInc(6), Operand::Reg(5));
     }
@@ -351,7 +426,7 @@ void Generator::GenerateProcedure(int procindex)
     }
     Emit("RETURN");
     if (!g_noopt)
-        OptimizeCode(*m_code);
+        OptimizeCode(*m_code, m_runtime);
     LayoutBranches(*m_code);
 }
 

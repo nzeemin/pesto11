@@ -136,10 +136,7 @@ INIT$S = . + 2
 P00001:
 	MOV	R5, -(SP)
 	MOV	SP, R5
-	TST	-(SP)
-	MOV	4.(R5), -2.(R5)
-	MOV	-2.(R5), R0
-	MOV	R5, SP
+	MOV	4.(R5), R0
 	MOV	(SP)+, R5
 	MOV	(SP)+, (SP)
 	RETURN

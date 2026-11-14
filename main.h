@@ -1023,6 +1023,9 @@ struct RuntimeBlock
     string  name;
     std::vector<string> needs;
     std::vector<string> lines;
+    int     inputregs;      // Registers R0..R4 the routine reads (bit mask), from its "Вход:" comment; -1 unknown
+public:
+    RuntimeBlock() : inputregs(-1) {}
 };
 
 class RuntimeGenerator
@@ -1033,6 +1036,8 @@ public:
     const RuntimeBlock* FindBlock(const string& name) const;
     // Closure of the needed blocks over their dependencies, in template order
     std::vector<const RuntimeBlock*> CollectBlocks(const std::set<string>& needs) const;
+private:
+    static int ParseInputRegisters(const RuntimeBlock& block);
 };
 
 
@@ -1070,6 +1075,7 @@ class Generator
     int     m_stringcount;
     int     m_lastfile, m_lastline;         // Last source line put into a comment
     string  m_exitlabel;                    // Epilogue of the procedure being generated, for Exit
+    int     m_resultinr0;                   // Function result symbol computed straight into R0, -1 if none
     std::map<string, Operand> m_withstatic; // With slot -> record operand, when the record address is static
     int     m_setrangetype;                 // Set type whose range checks constructor elements, -1: their own type
     bool    m_usesreal;                     // Real code was generated: the FIS trap handler is needed
@@ -1107,6 +1113,7 @@ private:
     bool GenerateCase(StatementModel& statement);
     bool GenerateGoto(StatementModel& statement);
     bool GenerateAssignInPlace(StatementModel& statement);
+    bool IsResultInR0(int procindex);
     bool GenerateAsm(StatementModel& statement);
     bool GenerateWith(StatementModel& statement);
     bool GenerateStructAssign(StatementModel& statement);
@@ -1137,7 +1144,7 @@ private:
     bool GetRightOperand(const ExpressionModel& expr, int index, Operand& operand);
     bool GenerateUnaryValue(const ExpressionModel& expr, int index);
     bool GenerateBinaryValue(const ExpressionModel& expr, int index);
-    bool GenerateBooleanValue(const ExpressionModel& expr, int index);
+    bool GenerateBooleanValue(const ExpressionModel& expr, int index, bool push = false);
     void EmitShiftConst(bool isshl, int n);
     bool LinesUseR0(size_t start) const;
     enum OperandsOrder { OperandsNormal, OperandsSwapped, OperandsStacked };
@@ -1197,7 +1204,7 @@ const char* GetCompareBranch(const Token& op, bool isunsigned, bool jumpiftrue);
 // Branch layout: replace short branches that cannot reach their target, see branches.cpp
 void LayoutBranches(ProcedureCode& code);
 const char* GetInverseBranch(const string& opcode);  // BEQ -> BNE and so on, nullptr for BR
-void OptimizeCode(ProcedureCode& code);  // Peephole, peephole.cpp
+void OptimizeCode(ProcedureCode& code, const RuntimeGenerator* runtime);  // Peephole, peephole.cpp
 
 // Write PROGRAM.MAC and the runtime PESTO.MAC (or one file with --onefile), see generator.cpp
 bool WriteAssemblyFiles(const FinalModel& final, const RuntimeGenerator& runtime,

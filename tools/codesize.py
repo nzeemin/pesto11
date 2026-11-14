@@ -7,11 +7,14 @@
 #   OMSI_DIR/KINGOM-PASCAL under the RT-11 emulator rt11.exe (environment variable RT11EXE,
 #   default C:/bin/rt11/rt11.exe). Without it these examples are skipped in the comparison.
 #
-# Code words: instruction lines of the assembler listing; .WORD right after CALL/JSR (inline arguments)
-# counts as code too. Strings, variables and the runtime are not counted.
+# Two comparisons:
+#  - program code, words: instruction lines of the assembler listing; .WORD right after CALL/JSR (inline
+#    arguments) counts as code too. Strings, variables and the runtime are not counted;
+#  - whole image, bytes: the top address of the .SAV minus 1000 -- code, strings, runtime and its buffers.
+#    OMSI Pascal allocates the global variables at the start, so ours (.BLKW of the program) are subtracted.
 # Procedures that have no counterpart in OMSI code are excluded: RANDU (FORTRAN library in the original)
 # and the high score module KINGM6 (L65754, L64564, L65504: ported in another way).
-import os, re, sys, subprocess, tempfile, shutil, collections
+import os, re, sys, struct, subprocess, tempfile, shutil, collections
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 COMPILER = os.path.join(ROOT, 'Debug', 'pesto11.exe') if os.name == 'nt' else os.path.join(ROOT, 'pesto11')
@@ -74,16 +77,29 @@ def runtime_words(lst):
             total += len(m.group(2).split())
     return total
 
+PCLINK11 = os.path.join(ROOT, 'x-tools', 'pclink11.exe' if os.name == 'nt' else 'pclink11')
+
+def image_bytes(sav):
+    """Bytes of the program image in a .SAV: the top address (word at 50) minus the start 1000"""
+    data = open(sav, 'rb').read()
+    return struct.unpack('<H', data[0o50:0o52])[0] - 0o1000
+
 def ours(path):
-    """Code words of the program and words of its runtime"""
+    """Code words of the program, words of its runtime, and the image without the global variables.
+    OMSI Pascal allocates the global variables at the start, so they are not in its .SAV image;
+    ours are .BLKW in the program and are subtracted."""
     work = tempfile.mkdtemp()
     try:
         shutil.copy(path, work)
-        name = os.path.basename(path)
-        subprocess.run([COMPILER, '-q', name], cwd=work, check=True)
-        code = count(assemble(os.path.join(work, os.path.splitext(name)[0] + '.MAC'), work), True)
+        name = os.path.splitext(os.path.basename(path))[0]
+        subprocess.run([COMPILER, '-q', name + '.PAS'], cwd=work, check=True)
+        code = count(assemble(os.path.join(work, name + '.MAC'), work), True)
         runtime = runtime_words(assemble(os.path.join(work, 'PESTO.MAC'), work))
-        return code, runtime
+        subprocess.run([PCLINK11, name + '.OBJ', 'PESTO.OBJ', '-EXECUTE:' + name + '.SAV'], cwd=work, capture_output=True)
+        mac = open(os.path.join(work, name + '.MAC'), 'rb').read().decode('koi8-r', 'replace')
+        globals_ = 2 * sum(int(n) for n in re.findall(r'^V\d{5}:\t\.BLKW\t(\d+)\.', mac, re.M))
+        image = image_bytes(os.path.join(work, name + '.SAV')) - globals_
+        return code, runtime, image
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
@@ -94,9 +110,10 @@ OMSI_PATCHES = [
     ("ASSIGN(F, 'LZDATA.TXT'); RESET(F); V := 1;", "RESET(F, 'LZDATA', 'TXT', V);"),
 ]
 
-def omsi_compile(src, omsidir, work):
-    """MAC of the source by OMSI Pascal; None if the compiler cannot be run"""
+def omsi_build(src, omsidir, work):
+    """Compile, assemble and link the source by OMSI Pascal under rt11.exe: (MAC, SAV) or None"""
     pascal = os.path.join(omsidir, 'KINGOM-PASCAL', 'PASCAL.SAV')
+    library = os.path.join(omsidir, 'KINGOM-PASCAL', 'PASCAL.OBJ')
     if not os.path.exists(RT11EXE) or not os.path.exists(pascal):
         return None
     text = open(src, 'rb').read().decode('koi8-r')
@@ -104,10 +121,16 @@ def omsi_compile(src, omsidir, work):
         text = text.replace(old, new)
     open(os.path.join(work, os.path.basename(src)), 'wb').write(text.encode('koi8-r'))
     shutil.copy(pascal, work)
+    shutil.copy(library, work)
     name = os.path.splitext(os.path.basename(src))[0]
     subprocess.run([RT11EXE, 'RU', 'PASCAL', '%s,%s=%s.PAS' % (name, name, name)], cwd=work, capture_output=True)
     mac = os.path.join(work, name + '.MAC')
-    return mac if os.path.exists(mac) else None
+    if not os.path.exists(mac):
+        return None
+    subprocess.run([RT11EXE, 'MACRO', name + '.MAC'], cwd=work, capture_output=True)
+    subprocess.run([RT11EXE, 'LINK/STACK:1000', name + ',PASCAL'], cwd=work, capture_output=True)
+    sav = os.path.join(work, name + '.SAV')
+    return mac, (sav if os.path.exists(sav) else None)
 
 def omsi(macs):
     work = tempfile.mkdtemp()
@@ -120,39 +143,50 @@ def omsi(macs):
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
+# Name, our source, OMSI .MAC files and .SAV in OMSI_DIR (None: the source is compiled by OMSI here)
 programs = [
     ('kingdom', os.path.join(ROOT, 'examples', 'kingdom', 'KINGOM.PAS'),
      ['KINGOM-PASCAL/KINGOM.MAC', 'KINGOM-PASCAL/KINGM2.MAC', 'KINGOM-PASCAL/KINGM3.MAC',
-      'KINGOM-PASCAL/KINGM4.MAC', 'KINGOM-PASCAL/KINGM5.MAC']),
-    ('stalker', os.path.join(ROOT, 'examples', 'stalker', 'STALK.PAS'), ['STALK-PASCAL/STALK1.MAC']),
-    ('leibniz', os.path.join(ROOT, 'examples', 'leibniz', 'LEIBNZ.PAS'), None),  # Compiled by OMSI here
-    ('sieve', os.path.join(ROOT, 'examples', 'sieve', 'SIEVE.PAS'), None),
-    ('qsort', os.path.join(ROOT, 'examples', 'qsort', 'QSORT.PAS'), None),
-    ('lz77', os.path.join(ROOT, 'examples', 'lz77', 'LZ77.PAS'), None),
-    ('tpk', os.path.join(ROOT, 'examples', 'tpk', 'TPK.PAS'), None),
+      'KINGOM-PASCAL/KINGM4.MAC', 'KINGOM-PASCAL/KINGM5.MAC'], 'KINGOM-PASCAL/KINGOM.SAV'),
+    ('stalker', os.path.join(ROOT, 'examples', 'stalker', 'STALK.PAS'), ['STALK-PASCAL/STALK1.MAC'],
+     'STALK-PASCAL/STALKP.SAV'),
+    ('leibniz', os.path.join(ROOT, 'examples', 'leibniz', 'LEIBNZ.PAS'), None, None),
+    ('sieve', os.path.join(ROOT, 'examples', 'sieve', 'SIEVE.PAS'), None, None),
+    ('qsort', os.path.join(ROOT, 'examples', 'qsort', 'QSORT.PAS'), None, None),
+    ('lz77', os.path.join(ROOT, 'examples', 'lz77', 'LZ77.PAS'), None, None),
+    ('tpk', os.path.join(ROOT, 'examples', 'tpk', 'TPK.PAS'), None, None),
 ]
+
+def percent(a, b):
+    return '%5.1f%%' % (100.0 * a / b) if b else '     -'
+
 omsidir = sys.argv[1] if len(sys.argv) > 1 else None
-sumours = sumomsi = sumruntime = 0
-for name, src, macs in programs:
-    a, runtime = ours(src)
-    sumruntime += runtime
+print('Program code, words (no runtime, strings, variables) | whole image, bytes (code, strings, runtime,')
+print('runtime buffers; no global variables)')
+print('%-8s %8s %8s %7s | %8s %8s %7s | %s' % ('', 'Pesto/11', 'OMSI', '', 'Pesto/11', 'OMSI', '', 'runtime'))
+sums = [0, 0, 0, 0, 0]
+for name, src, macs, sav in programs:
+    code, runtime, image = ours(src)
+    omsicode = omsiimage = 0
     if omsidir:
         if macs is None:
             work = tempfile.mkdtemp()
             try:
-                mac = omsi_compile(src, omsidir, work)
-                if mac is None:
-                    print('%-8s Pesto/11 %6d  (OMSI Pascal not available)  runtime %5d' % (name, a, runtime))
-                    continue
-                b = omsi([mac])
+                built = omsi_build(src, omsidir, work)
+                if built is not None:
+                    omsicode = omsi([built[0]])
+                    if built[1] is not None:
+                        omsiimage = image_bytes(built[1])
             finally:
                 shutil.rmtree(work, ignore_errors=True)
         else:
-            b = omsi([os.path.join(omsidir, m) for m in macs])
-        sumours += a
-        sumomsi += b
-        print('%-8s Pesto/11 %6d  OMSI %6d  %5.1f%%  runtime %5d' % (name, a, b, 100.0 * a / b, runtime))
-    else:
-        print('%-8s Pesto/11 %6d  runtime %5d' % (name, a, runtime))
+            omsicode = omsi([os.path.join(omsidir, m) for m in macs])
+            omsiimage = image_bytes(os.path.join(omsidir, sav))
+    if omsicode and omsiimage:
+        for i, v in enumerate((code, omsicode, image, omsiimage, runtime)):
+            sums[i] += v
+    print('%-8s %8d %8s %7s | %8d %8s %7s | %5d' % (name, code, omsicode or '-', percent(code, omsicode),
+          image, omsiimage or '-', percent(image, omsiimage), runtime))
 if omsidir:
-    print('%-8s Pesto/11 %6d  OMSI %6d  %5.1f%%  runtime %5d' % ('total', sumours, sumomsi, 100.0 * sumours / sumomsi, sumruntime))
+    print('%-8s %8d %8d %7s | %8d %8d %7s | %5d' % ('total', sums[0], sums[1], percent(sums[0], sums[1]),
+          sums[2], sums[3], percent(sums[2], sums[3]), sums[4]))

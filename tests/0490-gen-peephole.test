@@ -117,12 +117,8 @@ L00008:
 P00002:
 	MOV	R5, -(SP)
 	MOV	SP, R5
-	TST	-(SP)
 	MOV	4.(R5), R0
 	NEG	R0
-	MOV	R0, -2.(R5)
-	MOV	-2.(R5), R0
-	MOV	R5, SP
 	MOV	(SP)+, R5
 	MOV	(SP)+, (SP)
 	RETURN

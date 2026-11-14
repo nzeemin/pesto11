@@ -261,6 +261,18 @@ bool Generator::GenerateAssign(StatementModel& statement)
     if (!Validator::IsScalar(type))
         return false;  // Real, strings, sets: later steps
 
+    // The function result kept in R0 (the last statement of the body): no slot, no store
+    if (m_resultinr0 >= 0 && targetnode.kind == NodeIdent && targetnode.symbol == m_resultinr0)
+    {
+        if (!GenerateValue(value, value.root))
+            return false;
+        // A byte result from a word value: the slot kept only the low byte
+        if (Validator::TypeSize(type) == 1 && Validator::TypeSize(valuenode.type) != 1 &&
+            !(valuenode.isconst && ConstOrdinalValue(valuenode) >= 0 && ConstOrdinalValue(valuenode) <= 255))
+            Emit("BIC", Operand::Imm(0xFF00), Operand::Reg(0));
+        return true;
+    }
+
     bool isbyte = (Validator::TypeSize(type) == 1);
     bool checked = (targetnode.token.directives & DirectiveR) != 0 &&
         (Validator::GetType(type).kind == TypeKindSubrange || Validator::GetType(type).kind == TypeKindEnum ||

@@ -73,4 +73,4 @@ pclink11 KINGOM.OBJ PESTO.OBJ -EXECUTE:KINGOM.SAV
 
 ## Размер кода
 
-Эти программы — эталон для сравнения с OMSI Pascal (DESIGN.md §7.11): код программы Pesto/11 занимает около 74% слов кода OMSI. Повторить замер: `python tools/codesize.py ПАПКА_uknc-various`.
+Эти программы — эталон для сравнения с OMSI Pascal (DESIGN.md §7.11): код программы Pesto/11 занимает около 73% слов кода OMSI, полный образ `.SAV` с рантаймом (без глобальных переменных) — около 70% байт. Повторить замер: `python tools/codesize.py ПАПКА_uknc-various`.

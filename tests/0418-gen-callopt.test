@@ -1,0 +1,152 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program CallOpt;
+{ Function result straight in R0, Boolean arguments straight on the stack }
+var I, J: Integer; B: Byte;
+function Twice(N: Integer): Integer;
+begin
+  Twice := N + N
+end;
+function Seven: Integer;
+begin
+  Seven := 7
+end;
+function NextByte(V: Byte): Byte;
+begin
+  NextByte := V + 1
+end;
+function Sign(N: Integer): Integer;
+begin
+  Sign := 0;
+  if N > 0 then Sign := 1;
+  if N < 0 then Sign := -1
+end;
+function Both(A, C: Boolean): Boolean;
+begin
+  Both := A and C
+end;
+begin
+  I := Twice(Seven); B := NextByte(B); J := Sign(I);
+  if Both(I < J, (I > 0) or (J = 0)) then I := 0;
+  if Both(not (I = 0), I in [1..5]) then J := 0
+end.
+=== MAC EXPECTED ======================================================
+	.TITLE	TEST
+START::
+	MOV	SP, INIT$S
+	MOV	#-2, R0
+	EMT	354
+	BIC	#1, R0
+	MOV	R0, SP
+	CALL	P00002
+	MOV	R0, -(SP)
+	CALL	P00001
+	MOV	R0, V00001
+	CLR	-(SP)
+	BISB	V00003, (SP)
+	CALL	P00003
+	MOVB	R0, V00003
+	MOV	V00001, -(SP)
+	CALL	P00004
+	MOV	R0, V00002
+	CLR	-(SP)
+	CMP	V00001, V00002
+	BGE	L00002
+	INC	(SP)
+L00002:
+	CLR	-(SP)
+	TST	V00001
+	BGT	L00004
+	TST	V00002
+	BNE	L00003
+L00004:
+	INC	(SP)
+L00003:
+	CALL	P00005
+	TST	R0
+	BEQ	L00001
+	CLR	V00001
+L00001:
+	CLR	R0
+	TST	V00001
+	BNE	L00006
+	INC	R0
+L00006:
+	DEC	R0
+	NEG	R0
+	MOV	R0, -(SP)
+	CLR	-(SP)
+	MOV	V00001, R0
+	CMP	R0, #1.
+	BLT	L00007
+	CMP	R0, #5.
+	BGT	L00007
+	INC	(SP)
+L00007:
+	CALL	P00005
+	TST	R0
+	BEQ	L00005
+	CLR	V00002
+L00005:
+HALT::
+INIT$S = . + 2
+	MOV	#776, SP
+	EMT	350
+P00001:
+	MOV	R5, -(SP)
+	MOV	SP, R5
+	MOV	4.(R5), R0
+	ADD	4.(R5), R0
+	MOV	(SP)+, R5
+	MOV	(SP)+, (SP)
+	RETURN
+P00002:
+	MOV	#7., R0
+	RETURN
+P00003:
+	MOV	R5, -(SP)
+	MOV	SP, R5
+	CLR	R0
+	BISB	4.(R5), R0
+	INC	R0
+	BIC	#65280., R0
+	MOV	(SP)+, R5
+	MOV	(SP)+, (SP)
+	RETURN
+P00004:
+	MOV	R5, -(SP)
+	MOV	SP, R5
+	TST	-(SP)
+	CLR	-2.(R5)
+	TST	4.(R5)
+	BLE	L00014
+	MOV	#1., -2.(R5)
+L00014:
+	TST	4.(R5)
+	BGE	L00015
+	MOV	#-1., -2.(R5)
+L00015:
+	MOV	-2.(R5), R0
+	MOV	R5, SP
+	MOV	(SP)+, R5
+	MOV	(SP)+, (SP)
+	RETURN
+P00005:
+	MOV	R5, -(SP)
+	MOV	SP, R5
+	CLR	R0
+	TSTB	6.(R5)
+	BEQ	L00017
+	TSTB	4.(R5)
+	BEQ	L00017
+	INC	R0
+L00017:
+	MOV	(SP)+, R5
+	MOV	(SP), 4.(SP)
+	ADD	#4., SP
+	RETURN
+V00001:	.BLKW	1.
+V00002:	.BLKW	1.
+V00003:	.BLKW	1.
+PEND::
+	.END	START

@@ -448,12 +448,49 @@ void Generator::EmitShiftConst(bool isshl, int n)
     Emit("BIC", Operand::Imm((int16_t)(~(0xFFFF >> n) & 0xFFFF)), Operand::Reg(0), "logical shift");
 }
 
-// Boolean value 0/1 into R0
-bool Generator::GenerateBooleanValue(const ExpressionModel& expr, int index)
+// MemAvail and MaxAvail see the stack pointer: a word pushed before them changes the value
+static bool UsesFreeMemory(const ExpressionModel& expr)
+{
+    for (const ExpressionNode& node : expr.nodes)
+    {
+        if (node.symbol < 0 || g_program.symbols[node.symbol].kind != SymStdFunc)
+            continue;
+        const string& name = Validator::m_stdroutines[g_program.symbols[node.symbol].stdindex].name;
+        if (name == "MemAvail" || name == "MaxAvail")
+            return true;
+    }
+    return false;
+}
+
+// Boolean value 0/1 into R0; with push, onto the stack instead
+bool Generator::GenerateBooleanValue(const ExpressionModel& expr, int index, bool push)
 {
     const ExpressionNode& node = expr.nodes[index];
     bool binarylogic = node.kind == NodeBinary &&
         (node.token.IsKeyword(KeywordAND) || node.token.IsKeyword(KeywordOR) || node.token.IsKeyword(KeywordXOR));
+    bool viacondition = !(binarylogic && (node.token.IsKeyword(KeywordXOR) || HasSideEffects(expr, index))) &&
+        !(node.kind == NodeUnary && node.token.IsKeyword(KeywordNOT) && !HasSideEffects(expr, node.left)) &&
+        !(push && UsesFreeMemory(expr));
+
+    if (push)
+    {
+        if (!viacondition)
+        {
+            if (!GenerateBooleanValue(expr, index))
+                return false;
+            Emit("MOV", Operand::Reg(0), Operand::AutoDec(6));
+            return true;
+        }
+        // Straight on the stack: CLR -(SP), the condition jumps, INC (SP) when true.
+        // The condition code leaves the stack as it found it.
+        string falselabel = NewLabel();
+        Emit("CLR", Operand::AutoDec(6));
+        if (!GenerateCondition(expr, index, falselabel, false))
+            return false;
+        Emit("INC", Operand::Deferred(6));
+        EmitLabel(falselabel);
+        return true;
+    }
 
     // and/or/xor with side effects: both operands are evaluated, then combined
     if (binarylogic && (node.token.IsKeyword(KeywordXOR) || HasSideEffects(expr, index)))
@@ -842,6 +879,10 @@ bool Generator::PushArgument(const ExpressionModel& expr, int argnode, bool isva
             Emit("MOV", operand, Operand::AutoDec(6), node.token.text);
         return true;
     }
+    // Comparison, in, and/or, not: the Boolean goes straight to the stack
+    if (Validator::IsBooleanType(node.type) &&
+        (node.kind == NodeBinary || (node.kind == NodeUnary && node.token.IsKeyword(KeywordNOT))))
+        return GenerateBooleanValue(expr, argnode, true);
     if (!GenerateValue(expr, argnode))
         return false;
     Emit("MOV", Operand::Reg(0), Operand::AutoDec(6));

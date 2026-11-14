@@ -62,13 +62,7 @@ INIT$S = . + 2
 	MOV	#776, SP
 	EMT	350
 P00001:
-	MOV	R5, -(SP)
-	MOV	SP, R5
-	TST	-(SP)
-	MOV	#1., -2.(R5)
-	MOV	-2.(R5), R0
-	MOV	R5, SP
-	MOV	(SP)+, R5
+	MOV	#1., R0
 	RETURN
 V00001:	.BLKW	1.
 V00002:	.BLKW	1.
