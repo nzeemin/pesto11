@@ -159,6 +159,7 @@ const unsigned DIRECTIVES_DEFAULT = DirectiveA | DirectiveB | DirectiveC | Direc
 const unsigned DIRECTIVES_GLOBAL = DirectiveB | DirectiveC;
 
 const size_t MAX_IDENTIFIER_LENGTH = 127;
+const size_t MAX_STRING_LENGTH = 255;      // Longest string constant
 
 const char* GetKeywordName(KeywordIndex keyword);
 const char* GetSymbolText(SymbolIndex symbol);

@@ -37,6 +37,25 @@ function Twice(V: Integer): Integer;
 begin
   Twice := V * 2
 end;
+procedure ForOuter(var Sum, Last: Integer);
+var I: Integer; C: Char; Bt: Byte;
+  procedure Run;
+    procedure Deeper;
+    begin
+      for I := 1 to 3 do Sum := Sum + 10000
+    end;
+  begin
+    Sum := 0;
+    for I := 1 to 5 do Sum := Sum + I;
+    for I := I downto 3 do Sum := Sum + 100;
+    Last := I;
+    for Bt := 250 to 255 do Sum := Sum + 1;
+    for C := 'x' to 'z' do Sum := Sum + 1000;
+    Deeper
+  end;
+begin
+  Run
+end;
 begin
   TP := 0; TF := 0; GN := ''; Done;
   Group('FOLD');
@@ -100,6 +119,8 @@ begin
   A[2] := 10; A[2] := A[2] + 5; Check(A[2] = 15, 15);
   R.M := 3; R.M := R.M + R.M; Check(R.M = 6, 16);
   I := 3; I := 10 - I; Check(I = 7, 17);
+  Group('FOROUTER');
+  ForOuter(K, J); Check(K = 3321 + 30000, 1); Check(J = 3, 2);
   Done;
   WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
 end.
@@ -110,4 +131,5 @@ BOOLEAN      PASS   6
 OPERANDS     PASS  15
 FOR          PASS  15
 INPLACE      PASS  17
-TOTAL PASS 78 FAIL 0
+FOROUTER     PASS   2
+TOTAL PASS 80 FAIL 0

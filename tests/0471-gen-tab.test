@@ -1,0 +1,19 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Tabs;
+begin
+  WriteLn('A'#9'B');
+  WriteLn(#9'C');
+  WriteLn('1234567'#9'D'#9'E');
+  WriteLn('12345678'#9'G');
+  GotoXY(3, 20); Write(#9'F'); WriteLn
+end.
+=== SCREEN EXPECTED ===================================================
+A       B
+        C
+1234567 D       E
+12345678        G
+
+
+
+        F

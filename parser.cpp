@@ -1283,6 +1283,8 @@ int Parser::ParseStringLiteral(ExpressionModel& expr)
         if ((m_token.type != TokenTypeString && !IsSymbol(SymbolCaret)) || m_token.separated)
             break;
     }
+    if (token.svalue.size() > MAX_STRING_LENGTH)
+        Error(token, 0, "String constant is longer than 255 characters");
     return NewNode(expr, NodeString, token);
 }
 

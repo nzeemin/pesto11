@@ -341,9 +341,14 @@ bool Generator::GenerateFor(StatementModel& statement)
 {
     const ExpressionModel& var = statement.target;
     const ExpressionNode& varnode = var.nodes[var.root];
+    // A variable of an enclosing procedure has no static operand: its address is found
+    // through the static chain into R3 before each use, the body may change R3
     Operand varop;
-    if (!GetVariableOperand(var, var.root, varop))
-        return false;
+    bool staticvar = GetVariableOperand(var, var.root, varop);
+    auto getvar = [&]() -> bool
+    {
+        return staticvar || GenerateDesignator(var, var.root, 3, varop);
+    };
     bool isbyte = (Validator::TypeSize(varnode.type) == 1);
     const char* movop = isbyte ? "MOVB" : "MOV";
     const char* cmpop = isbyte ? "CMPB" : "CMP";
@@ -379,6 +384,8 @@ bool Generator::GenerateFor(StatementModel& statement)
     {
         // Both known: the pretest is decided now
         int64_t from = ConstOrdinalValue(initnode), to = ConstOrdinalValue(finalnode);
+        if (!getvar())
+            return false;
         if (from == 0)
             Emit(isbyte ? "CLRB" : "CLR", varop, Operand(), varnode.token.text);
         else
@@ -388,16 +395,20 @@ bool Generator::GenerateFor(StatementModel& statement)
     }
     else if (initsimple && (isbyte || !initbyte))
     {
+        if (!getvar())
+            return false;
         if (initnode.isconst && initop.value == 0)
             Emit(isbyte ? "CLRB" : "CLR", varop, Operand(), varnode.token.text);
         else
             Emit(movop, initop, varop, varnode.token.text);
-        Emit(cmpop, varop, limit);
+        Emit(cmpop, varop, limit);  // The address in R3 is still there
         EmitBranch(statement.downto ? (isbyte ? "BLO" : "BLT") : (isbyte ? "BHI" : "BGT"), endlabel, "not even once");
     }
     else
     {
         if (!GenerateValue(statement.expr, statement.expr.root))
+            return false;
+        if (!getvar())
             return false;
         Emit(movop, Operand::Reg(0), varop, varnode.token.text);
         Emit("CMP", Operand::Reg(0), limit);  // Byte values are zero-extended: a signed comparison is right
@@ -405,9 +416,13 @@ bool Generator::GenerateFor(StatementModel& statement)
     }
     EmitBranch("BR", bodylabel);
     EmitLabel(looplabel);
+    if (!getvar())
+        return false;
     Emit(statement.downto ? (isbyte ? "DECB" : "DEC") : (isbyte ? "INCB" : "INC"), varop, Operand(), varnode.token.text);
     EmitLabel(bodylabel);
     GenerateStatement(statement.statements[0]);
+    if (!getvar())
+        return false;
     Emit(cmpop, varop, limit, varnode.token.text);
     EmitBranch("BNE", looplabel, "the variable keeps the final value");
     EmitLabel(endlabel);
