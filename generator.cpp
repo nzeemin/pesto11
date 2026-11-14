@@ -233,6 +233,8 @@ void Generator::GenerateProcedure(int procindex)
         m_initend = m_code->lines.size();
         GenerateStatement(proc.block.body);
         EmitTemplateBlock("TERM");
+        if (!g_noopt)
+            OptimizeCode(*m_code);
         LayoutBranches(*m_code);
         return;
     }
@@ -347,6 +349,8 @@ void Generator::GenerateProcedure(int procindex)
         Emit("ADD", Operand::Imm(params), Operand::Reg(6));
     }
     Emit("RETURN");
+    if (!g_noopt)
+        OptimizeCode(*m_code);
     LayoutBranches(*m_code);
 }
 

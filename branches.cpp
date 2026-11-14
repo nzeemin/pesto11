@@ -13,7 +13,7 @@
 
 //////////////////////////////////////////////////////////////////////
 
-static const char* GetInverseBranch(const string& opcode)
+const char* GetInverseBranch(const string& opcode)
 {
     static const char* pairs[][2] =
     {

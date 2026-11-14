@@ -51,7 +51,7 @@ START::
 	MOV	R0, SP
 	MOV	#1., V00001+4.
 	MOV	V00007, R0
-	ADD	#1., R0
+	INC	R0
 	MOV	R0, R3
 	ASL	R3
 	MOV	V00001-2.(R3), R0
@@ -79,8 +79,7 @@ L00001:
 	MOV	(R3), R0
 	MOV	V00005, R3
 	MOV	R0, 6.(R3)
-	MOV	V00005, R3
-	MOV	R3, V00010
+	MOV	V00005, V00010
 	MOV	V00010, R3
 	MOV	#5., (R3)
 	MOV	V00010, R3
@@ -126,7 +125,6 @@ L00002:
 	MOV	-16.(R5), 2.(R3)
 	MOV	R5, R4
 	CALL	P00002
-L00003:
 	MOV	R5, SP
 	MOV	(SP)+, R5
 	MOV	(SP), 6.(SP)
@@ -137,28 +135,24 @@ P00002:
 	MOV	SP, R5
 	MOV	R4, -(SP)
 	MOV	-2.(R5), R3
-	MOV	8.(R3), R3
-	MOV	R3, -(SP)
+	MOV	8.(R3), -(SP)
 	MOV	-2.(R5), R3
 	MOV	4.(R3), R0
 	ASL	R0
 	ADD	(SP)+, R0
 	MOV	R0, R3
-	MOV	2.(R3), R0
-	MOV	R0, -(SP)
+	MOV	2.(R3), -(SP)
 	MOV	-2.(R5), R3
 	MOV	-6.(R3), R0
 	ADD	(SP)+, R0
 	MOV	R0, -(SP)
-	MOV	-2.(R5), R3
-	MOV	R3, -(SP)
+	MOV	-2.(R5), -(SP)
 	MOV	-2.(R5), R3
 	MOV	4.(R3), R0
 	ASL	R0
 	ADD	(SP)+, R0
 	MOV	R0, R3
 	MOV	(SP)+, -20.(R3)
-L00004:
 	MOV	R5, SP
 	MOV	(SP)+, R5
 	RETURN

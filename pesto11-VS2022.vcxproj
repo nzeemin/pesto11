@@ -172,6 +172,7 @@
     <ClCompile Include="generator-var.cpp" />
     <ClCompile Include="runtime.cpp" />
     <ClCompile Include="branches.cpp" />
+    <ClCompile Include="peephole.cpp" />
     <ClCompile Include="model.cpp" />
     <ClCompile Include="parser.cpp" />
     <ClCompile Include="tokenizer.cpp" />

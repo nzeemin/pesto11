@@ -1187,6 +1187,8 @@ const char* GetCompareBranch(const Token& op, bool isunsigned, bool jumpiftrue);
 
 // Branch layout: replace short branches that cannot reach their target, see branches.cpp
 void LayoutBranches(ProcedureCode& code);
+const char* GetInverseBranch(const string& opcode);  // BEQ -> BNE and so on, nullptr for BR
+void OptimizeCode(ProcedureCode& code);  // Peephole, peephole.cpp
 
 // Write PROGRAM.MAC and the runtime PESTO.MAC (or one file with --onefile), see generator.cpp
 bool WriteAssemblyFiles(const FinalModel& final, const RuntimeGenerator& runtime,

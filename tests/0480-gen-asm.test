@@ -114,7 +114,6 @@ L00007:
 	MOV	0.(R5), R2
 	MOV	@-2.(R5), R3
 	MOV	#10.*2+<-3.>, R2
-L00006:
 	MOV	R5, SP
 	MOV	(SP)+, R5
 	MOV	(SP), 4.(SP)
@@ -126,7 +125,6 @@ P00002:
 	TST	-(SP)
 L00009:
 	MOV	4.(R5), -2.(R5)
-L00008:
 	MOV	-2.(R5), R0
 	MOV	R5, SP
 	MOV	(SP)+, R5
