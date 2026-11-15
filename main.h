@@ -154,8 +154,9 @@ enum DirectiveFlag
     DirectiveU = 0x20,  // User interrupt by Ctrl-C
     DirectiveV = 0x40,  // Strict string length check for var parameters
     DirectiveX = 0x80,  // Array optimization; accepted and ignored
+    DirectiveK = 0x100, // Stack check in procedure prologues (TP3 for MS-DOS); accepted, not checked yet
 };
-const unsigned DIRECTIVES_DEFAULT = DirectiveA | DirectiveB | DirectiveC | DirectiveI | DirectiveV | DirectiveX;
+const unsigned DIRECTIVES_DEFAULT = DirectiveA | DirectiveB | DirectiveC | DirectiveI | DirectiveK | DirectiveV | DirectiveX;
 const unsigned DIRECTIVES_GLOBAL = DirectiveB | DirectiveC;
 
 const size_t MAX_IDENTIFIER_LENGTH = 127;

@@ -3,7 +3,8 @@
 # Usage: python tools/codesize.py [OMSI_DIR]
 #   OMSI_DIR - folder with the uknc-various repository (KINGOM-PASCAL, STALK-PASCAL with the OMSI .MAC files);
 #              without it only the Pesto/11 numbers are printed.
-#   Examples written for both compilers (leibniz, sieve, qsort, lz77, tpk; the file opening line is replaced by the OMSI form) are compiled by OMSI Pascal on the spot: PASCAL.SAV from
+#   Examples written for both compilers (leibniz, sieve, qsort, lz77, tpk, mandel; the file opening line is replaced by the OMSI form)
+#   and the OMSI variants in tools/omsi (wumpus) are compiled by OMSI Pascal on the spot: PASCAL.SAV from
 #   OMSI_DIR/KINGOM-PASCAL under the RT-11 emulator rt11.exe (environment variable RT11EXE,
 #   default C:/bin/rt11/rt11.exe). Without it these examples are skipped in the comparison.
 #
@@ -28,10 +29,11 @@ def assemble(mac, workdir):
                    cwd=workdir, capture_output=True)
     return os.path.join(workdir, name + '.LST')
 
-def count(lst, ours):
-    """Code words per procedure. Ours: segments start at Pnnnnn:/START::; OMSI: at a "; procedure X" comment."""
+def count(lst, ours, skip=0):
+    """Code words per procedure. Ours: segments start at Pnnnnn:/START::; OMSI: at a "; procedure X" comment.
+    skip: the first procedures of an OMSI listing (up to that many RTS) are not counted."""
     res = collections.OrderedDict()
-    cur, lastname, prevop = 'MAIN', None, ''
+    cur, lastname, prevop = ('SKIP' if skip else 'MAIN'), None, ''
     for l in open(lst, 'rb').read().decode('koi8-r', 'replace').replace('\r', '').split('\n'):
         m = LINE.match(l)
         if not m:
@@ -66,7 +68,11 @@ def count(lst, ours):
         else:
             prevop = op
         res[cur] = res.get(cur, 0) + words
-    return sum(v for k, v in res.items() if k != 'DATA' and k not in EXCLUDE)
+        if cur == 'SKIP' and op == 'RTS':
+            skip -= 1
+            if skip == 0:
+                cur = 'MAIN'
+    return sum(v for k, v in res.items() if k not in ('DATA', 'SKIP') and k not in EXCLUDE)
 
 def runtime_words(lst):
     """Words of the runtime module: code and initialized data (tables), .BLKW not counted"""
@@ -132,18 +138,20 @@ def omsi_build(src, omsidir, work):
     sav = os.path.join(work, name + '.SAV')
     return mac, (sav if os.path.exists(sav) else None)
 
-def omsi(macs):
+def omsi(macs, skip=0):
     work = tempfile.mkdtemp()
     try:
         total = 0
         for mac in macs:
             shutil.copy(mac, work)
-            total += count(assemble(os.path.join(work, os.path.basename(mac)), work), False)
+            total += count(assemble(os.path.join(work, os.path.basename(mac)), work), False, skip)
         return total
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
-# Name, our source, OMSI .MAC files and .SAV in OMSI_DIR (None: the source is compiled by OMSI here)
+# Name, our source, OMSI .MAC files and .SAV in OMSI_DIR (None: the source is compiled by OMSI here;
+# a tuple: the OMSI variant of the source in tools/omsi, compiled here, and the number of its first
+# procedures not counted -- helpers for what TP3 has built in)
 programs = [
     ('kingdom', os.path.join(ROOT, 'examples', 'kingdom', 'KINGOM.PAS'),
      ['KINGOM-PASCAL/KINGOM.MAC', 'KINGOM-PASCAL/KINGM2.MAC', 'KINGOM-PASCAL/KINGM3.MAC',
@@ -155,6 +163,10 @@ programs = [
     ('qsort', os.path.join(ROOT, 'examples', 'qsort', 'QSORT.PAS'), None, None),
     ('lz77', os.path.join(ROOT, 'examples', 'lz77', 'LZ77.PAS'), None, None),
     ('tpk', os.path.join(ROOT, 'examples', 'tpk', 'TPK.PAS'), None, None),
+    ('mandel', os.path.join(ROOT, 'examples', 'mandel', 'MANDEL.PAS'), None, None),
+    # OMSI: the cave filled by INITCAVE (TP3: a typed constant) and RANDOM are not counted
+    ('wumpus', os.path.join(ROOT, 'examples', 'wumpus', 'WUMPUS.PAS'),
+     (os.path.join(ROOT, 'tools', 'omsi', 'WUMPUS.PAS'), 3), None),
 ]
 
 def percent(a, b):
@@ -169,12 +181,13 @@ for name, src, macs, sav in programs:
     code, runtime, image = ours(src)
     omsicode = omsiimage = 0
     if omsidir:
-        if macs is None:
+        if macs is None or isinstance(macs, tuple):
+            omsisrc, skip = (src, 0) if macs is None else macs
             work = tempfile.mkdtemp()
             try:
-                built = omsi_build(src, omsidir, work)
+                built = omsi_build(omsisrc, omsidir, work)
                 if built is not None:
-                    omsicode = omsi([built[0]])
+                    omsicode = omsi([built[0]], skip)
                     if built[1] is not None:
                         omsiimage = image_bytes(built[1])
             finally:

@@ -360,6 +360,13 @@ static string keys_to_script(const std::vector<string>& keys)
                     close = line.size();
                 key = line.substr(i + 1, close - i - 1);
                 i = close;
+                if (key.compare(0, 5, "WAIT ") == 0)
+                {
+                    // {WAIT n}: n frames before the next key, so the program prints its answer
+                    // before the next keys are echoed
+                    script += "cf" + std::to_string(atoi(key.c_str() + 5)) + "\n";
+                    continue;
+                }
                 if (key == "LBRACE")
                     key = "{";
                 else if (key == "RBRACE")

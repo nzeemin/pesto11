@@ -44,13 +44,13 @@ static string JoinTokens(const std::vector<Token>& tokens)
 // Directives that differ from the defaults, like " {$R+,I-}"; empty if none
 static string GetDirectivesDiffFromDefault(unsigned directives)
 {
-    static const char letters[] = "ABCIRUVX";
+    static const char letters[] = "ABCIKRUVX";
     static const unsigned flags[] =
     {
-        DirectiveA, DirectiveB, DirectiveC, DirectiveI, DirectiveR, DirectiveU, DirectiveV, DirectiveX
+        DirectiveA, DirectiveB, DirectiveC, DirectiveI, DirectiveK, DirectiveR, DirectiveU, DirectiveV, DirectiveX
     };
     string result;
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < 9; i++)
     {
         if ((directives & flags[i]) == (DIRECTIVES_DEFAULT & flags[i]))
             continue;

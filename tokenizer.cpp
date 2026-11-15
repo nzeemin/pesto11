@@ -58,13 +58,13 @@ static KeywordIndex FindKeyword(const string& upperword)
 
 string GetDirectivesString(unsigned directives)
 {
-    static const char letters[] = "ABCIRUVX";
+    static const char letters[] = "ABCIKRUVX";
     static const unsigned flags[] =
     {
-        DirectiveA, DirectiveB, DirectiveC, DirectiveI, DirectiveR, DirectiveU, DirectiveV, DirectiveX
+        DirectiveA, DirectiveB, DirectiveC, DirectiveI, DirectiveK, DirectiveR, DirectiveU, DirectiveV, DirectiveX
     };
     string result;
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < 9; i++)
     {
         if (i > 0)
             result += ' ';
@@ -363,6 +363,7 @@ void Tokenizer::ProcessDirective(const string& body, const SourcePos& startpos)
         case 'B': flag = DirectiveB; break;
         case 'C': flag = DirectiveC; break;
         case 'I': flag = DirectiveI; break;
+        case 'K': flag = DirectiveK; break;
         case 'R': flag = DirectiveR; break;
         case 'U': flag = DirectiveU; break;
         case 'V': flag = DirectiveV; break;
