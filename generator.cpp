@@ -22,8 +22,8 @@ static string MakeLabel(char prefix, int number)
 
 Generator::Generator(FinalModel* final, const RuntimeGenerator* runtime) :
     m_final(final), m_runtime(runtime), m_code(nullptr), m_procindex(0),
-    m_labelcount(0), m_gotocount(0), m_stringcount(0), m_lastfile(-1), m_lastline(0), m_setrangetype(-1),
-    m_usesreal(false), m_initend(0), m_resultinr0(-1)
+    m_labelcount(0), m_gotocount(0), m_stringcount(0), m_lastfile(-1), m_lastline(0), m_resultinr0(-1),
+    m_setrangetype(-1), m_usesreal(false), m_initend(0)
 {
     assert(final != nullptr);
     assert(runtime != nullptr);

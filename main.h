@@ -11,7 +11,7 @@
 
 typedef std::string string;
 
-const char* const PESTO11_VERSION = "0.0.1";
+const char* const PESTO11_VERSION = "0.2.0";
 
 
 //////////////////////////////////////////////////////////////////////
