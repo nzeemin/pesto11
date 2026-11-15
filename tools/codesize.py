@@ -4,7 +4,7 @@
 #   OMSI_DIR - folder with the uknc-various repository (KINGOM-PASCAL, STALK-PASCAL with the OMSI .MAC files);
 #              without it only the Pesto/11 numbers are printed.
 #   Examples written for both compilers (leibniz, sieve, qsort, lz77, tpk, mandel; the file opening line is replaced by the OMSI form)
-#   and the OMSI variants in tools/omsi (wumpus) are compiled by OMSI Pascal on the spot: PASCAL.SAV from
+#   and the OMSI variants in tools/omsi (wumpus, tictac) are compiled by OMSI Pascal on the spot: PASCAL.SAV from
 #   OMSI_DIR/KINGOM-PASCAL under the RT-11 emulator rt11.exe (environment variable RT11EXE,
 #   default C:/bin/rt11/rt11.exe). Without it these examples are skipped in the comparison.
 #
@@ -167,6 +167,9 @@ programs = [
     # OMSI: the cave filled by INITCAVE (TP3: a typed constant) and RANDOM are not counted
     ('wumpus', os.path.join(ROOT, 'examples', 'wumpus', 'WUMPUS.PAS'),
      (os.path.join(ROOT, 'tools', 'omsi', 'WUMPUS.PAS'), 3), None),
+    # OMSI: Random is not counted
+    ('tictac', os.path.join(ROOT, 'examples', 'tictac', 'TICTAC.PAS'),
+     (os.path.join(ROOT, 'tools', 'omsi', 'TICTAC.PAS'), 1), None),
 ]
 
 def percent(a, b):

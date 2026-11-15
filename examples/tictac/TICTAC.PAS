@@ -1,0 +1,225 @@
+program TicTac(Input, Output);
+{ Tic-tac-toe: the human plays O, the computer X; the players open in turn.
+  The computer searches all the moves to the end of the game (depth first,
+  recursive) and never loses. Adapted from the Pascal solution of the Rosetta Code
+  task "Tic-tac-toe" for Turbo Pascal 3.0. }
+type
+  Contents = (Unassigned, Human, Computer);
+var
+  BestI, BestJ: Integer;               { the best move found at depth 0 }
+  B: array[0..2, 0..2] of Contents;     { zero based: a move 1..9 is (div 3, mod 3) }
+  Player, Win: Contents;
+
+procedure DisplayBoard;
+var
+  I, J: Integer;
+  T: array[Contents] of Char;
+begin
+  T[Unassigned] := ' ';
+  T[Human] := 'O';
+  T[Computer] := 'X';
+  for I := 0 to 2 do
+  begin
+    for J := 0 to 2 do
+    begin
+      Write(T[B[I, J]]);
+      if J <> 2 then Write(' | ')
+    end;
+    WriteLn;
+    if I < 2 then WriteLn('---------')
+  end;
+  WriteLn;
+  WriteLn
+end;
+
+function SwapPlayer(Player: Contents): Contents;
+begin
+  if Player = Computer then SwapPlayer := Human
+  else SwapPlayer := Computer
+end;
+
+{ The player with three in a row, or Unassigned }
+function CheckWinner: Contents;
+var
+  I: Integer;
+  W: Contents;
+begin
+  W := Unassigned;
+  for I := 0 to 2 do
+  begin
+    { a row }
+    if (W = Unassigned) and (B[I, 0] <> Unassigned) and
+      (B[I, 1] = B[I, 0]) and (B[I, 2] = B[I, 0]) then
+      W := B[I, 0]
+    else
+    { a column }
+    if (W = Unassigned) and (B[0, I] <> Unassigned) and
+      (B[1, I] = B[0, I]) and (B[2, I] = B[0, I]) then
+      W := B[0, I]
+  end;
+  { the two diagonals through the middle }
+  if (W = Unassigned) and (B[1, 1] <> Unassigned) then
+  begin
+    if (B[1, 1] = B[0, 0]) and (B[2, 2] = B[0, 0]) then
+      W := B[0, 0]
+    else if (B[1, 1] = B[2, 0]) and (B[0, 2] = B[1, 1]) then
+      W := B[1, 1]
+  end;
+  CheckWinner := W
+end;
+
+{ Whether the score is better than the best one so far.
+  Scores from the best down: Human (the mover wins), Unassigned, Computer. }
+function SaveBest(CurScore, CurBest: Contents): Boolean;
+begin
+  if CurScore = CurBest then
+    SaveBest := False
+  else if (CurScore = Unassigned) and (CurBest = Human) then
+    SaveBest := False
+  else if (CurScore = Computer) and ((CurBest = Unassigned) or (CurBest = Human)) then
+    SaveBest := False
+  else
+    SaveBest := True
+end;
+
+{ Depth first search of the moves of Val. Each level changes the board for the next
+  call and restores it on the way back. }
+function TestMove(Val: Contents; Depth: Integer): Contents;
+var
+  I, J: Integer;
+  Score, Best, Changed: Contents;
+begin
+  Best := Computer;
+  Changed := Unassigned;
+  Score := CheckWinner;
+  if Score <> Unassigned then
+  begin
+    if Score = Val then TestMove := Human
+    else TestMove := Computer
+  end
+  else
+  begin
+    for I := 0 to 2 do
+      for J := 0 to 2 do
+        if B[I, J] = Unassigned then
+        begin
+          Changed := Val;
+          B[I, J] := Val;
+          { the score for now, and try with the other player }
+          Score := TestMove(SwapPlayer(Val), Depth + 1);
+          if Score <> Unassigned then Score := SwapPlayer(Score);
+          B[I, J] := Unassigned;
+          if SaveBest(Score, Best) then
+          begin
+            if Depth = 0 then
+            begin { the top level: remember the move }
+              BestI := I;
+              BestJ := J
+            end;
+            Best := Score
+          end
+        end;
+    if Changed <> Unassigned then TestMove := Best
+    else TestMove := Unassigned
+  end
+end;
+
+{ A number from the line; 0 if it is not a number }
+function ReadNumber: Integer;
+var
+  S: string[20];
+  N, Code: Integer;
+begin
+  ReadLn(S);
+  Val(S, N, Code);
+  if Code <> 0 then N := 0;
+  ReadNumber := N
+end;
+
+{ Y or N }
+function AskYes: Boolean;
+var
+  S: string[20];
+begin
+  ReadLn(S);
+  if Length(S) = 0 then S := ' ';
+  AskYes := UpCase(S[1]) = 'Y'
+end;
+
+{ One game; Whom opens. The winner, or Unassigned for a draw. }
+function PlayGame(Whom: Contents): Contents;
+var
+  I, J, K, Move: Integer;
+  Win: Contents;
+  Ok: Boolean;
+begin
+  Win := Unassigned;
+  for I := 0 to 2 do
+    for J := 0 to 2 do
+      B[I, J] := Unassigned;
+  WriteLn('The board positions are numbered as follows:');
+  WriteLn('1 | 2 | 3');
+  WriteLn('---------');
+  WriteLn('4 | 5 | 6');
+  WriteLn('---------');
+  WriteLn('7 | 8 | 9');
+  WriteLn('You have O, I have X.');
+  WriteLn;
+  K := 1;
+  repeat
+    if Whom = Human then
+    begin
+      repeat
+        Write('Your move: ');
+        Move := ReadNumber;
+        Ok := (Move >= 1) and (Move <= 9);
+        if not Ok then
+          WriteLn('Oops: enter a number between 1 - 9.')
+        else
+        begin
+          I := (Move - 1) div 3;
+          J := (Move - 1) mod 3;
+          Ok := B[I, J] = Unassigned;
+          if not Ok then
+            WriteLn('Oops: move ', Move, ' was already done.')
+        end
+      until Ok;
+      B[I, J] := Human
+    end
+    else
+    begin
+      { a random opening, so that it is not always the same game }
+      if K = 1 then
+      begin
+        BestI := Random(3);
+        BestJ := Random(3)
+      end
+      else
+        Win := TestMove(Computer, 0);
+      B[BestI, BestJ] := Computer;
+      WriteLn('My move: ', BestI * 3 + BestJ + 1)
+    end;
+    DisplayBoard;
+    Win := CheckWinner;
+    if Win = Unassigned then
+    begin
+      K := K + 1;
+      Whom := SwapPlayer(Whom)
+    end
+  until (Win <> Unassigned) or (K > 9);
+  PlayGame := Win
+end;
+
+begin
+  Randomize;
+  Player := Human;
+  repeat
+    Win := PlayGame(Player);
+    if Win = Human then WriteLn('You win.')
+    else if Win = Computer then WriteLn('I win.')
+    else WriteLn('A draw.');
+    WriteLn;
+    Player := SwapPlayer(Player);
+    Write('Another game (Y/N)? ')
+  until not AskYes
+end.

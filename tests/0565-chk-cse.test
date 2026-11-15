@@ -1,0 +1,86 @@
+OPTIONS = -q
+=== SOURCE ============================================================
+program Check;
+type Str12 = string[12];
+var GP, GF, TP, TF: Integer; GN: Str12; Bad: string[40];
+procedure Check(Ok: Boolean; N: Integer);
+var S: string[5];
+begin
+  if Ok then GP := GP + 1 else
+  begin
+    GF := GF + 1; Str(N, S);
+    if Length(Bad) < 34 then Bad := Bad + ' ' + S
+  end
+end;
+procedure Done;
+begin
+  if GN <> '' then
+  begin
+    Write(GN, ' ':13 - Length(GN), 'PASS ', GP:3);
+    if GF > 0 then Write(' FAIL ', GF, ':', Bad);
+    WriteLn; TP := TP + GP; TF := TF + GF
+  end;
+  GP := 0; GF := 0; Bad := ''
+end;
+procedure Group(N: Str12);
+begin
+  Done; GN := N
+end;
+type Row = array[0..2] of Byte;
+var A: array[0..4, 0..2] of Byte; W: array[0..4] of Integer;
+  I, J, K, N: Integer; P: ^Integer; Q: ^Byte;
+procedure Bump(var V: Integer);
+begin
+  V := V + 1
+end;
+function Twice(V: Integer): Integer;
+begin
+  I := I + 1;  { changes the global index }
+  Twice := V + V
+end;
+function Same3(R: Integer): Boolean;
+begin
+  Same3 := (A[R, 0] = A[R, 1]) and (A[R, 1] = A[R, 2]) and (A[R, 0] <> 0)
+end;
+begin
+  TP := 0; TF := 0; GN := ''; Done;
+  Group('SAME INDEX');
+  for I := 0 to 4 do for J := 0 to 2 do A[I, J] := I * 3 + J;
+  I := 2; Check((A[I, 0] = 6) and (A[I, 1] = 7) and (A[I, 2] = 8), 1);
+  A[3, 0] := 5; A[3, 1] := 5; A[3, 2] := 5;
+  Check(Same3(3), 2); Check(not Same3(2), 3);
+  A[3, 2] := 6; Check(not Same3(3), 4);
+  I := 1; K := A[I, 0] + A[I, 1] + A[I, 2]; Check(K = 12, 5);
+  Group('WRITES');
+  { the index variable changes between two uses }
+  I := 1; K := A[I, 0]; I := 2; K := K * 100 + A[I, 0]; Check(K = 306, 1);
+  I := 1; K := A[I, 1]; Inc(I); K := K * 100 + A[I, 1]; Check(K = 407, 2);
+  I := 1; K := A[I, 2]; Bump(I); K := K * 100 + A[I, 2]; Check(K = 508, 3);
+  New(P); P^ := 1; I := 1; K := A[I, 0]; P := Ptr(Addr(I)); P^ := 3; K := K * 100 + A[I, 0];
+  Check(K = 305, 4);
+  I := 0; K := A[I, 0] + Twice(1) + A[I, 0]; Check(K = 0 + 2 + 3, 5);
+  I := 4; A[I, 0] := 1; A[I, 1] := A[I, 0] + 1; A[I, 2] := A[I, 1] + 1;
+  Check((A[4, 0] = 1) and (A[4, 1] = 2) and (A[4, 2] = 3), 6);
+  Q := Ptr(Addr(A[4, 1])); I := 4; K := A[I, 1]; Q^ := 9; K := K * 100 + A[I, 1]; Check(K = 209, 7);
+  Group('LOOPS');
+  N := 0;
+  for I := 0 to 4 do
+  begin
+    W[I] := 0;
+    for J := 0 to 2 do W[I] := W[I] + A[I, J]
+  end;
+  Check((W[0] = 3) and (W[1] = 12) and (W[2] = 21) and (W[3] = 16) and (W[4] = 13), 1);
+  I := 0; N := 0;
+  while I < 5 do begin N := N + W[I]; I := I + 1; N := N + W[I - 1] end;
+  Check(N = 130, 2);
+  K := 0; I := 0;
+  repeat K := K + A[I, 0]; I := I + 1 until I = 4;
+  Check((K = 14) and (I = 4), 3);
+  Done;
+  WriteLn('TOTAL PASS ', TP, ' FAIL ', TF)
+end.
+=== SCREEN EXPECTED ===================================================
+SAME INDEX   PASS   5
+WRITES       PASS   7
+LOOPS        PASS   3
+TOTAL PASS 15 FAIL 0

@@ -168,6 +168,8 @@ private:
     bool BranchToBranch(size_t i);
     bool BranchToReturn(size_t i);
     bool DeadCode(size_t i);
+    // Whole-procedure passes
+    bool RepeatedValue();
 };
 
 const Peephole::Pattern Peephole::m_patterns[] =
@@ -803,6 +805,191 @@ bool Peephole::DeadCode(size_t i)
 
 
 //////////////////////////////////////////////////////////////////////
+// Repeated register value
+
+// Source of a value that can be read again with the same result while nothing writes memory:
+// a constant, a variable, a local or parameter (R5 does not change), p^ with a static pointer
+static bool IsStableSource(const Operand& operand)
+{
+    switch (operand.mode)
+    {
+    case OpImmediate:
+    case OpLabel:
+    case OpLabelDeferred:
+        return true;
+    case OpIndex:
+    case OpIndexDeferred:
+    case OpRegDeferred:
+        return operand.reg == 5;
+    default:
+        return false;
+    }
+}
+
+// An instruction that changes only the register Rm by a constant: part of the computed value
+static bool IsValueStep(const CodeLine& line, int m)
+{
+    if (line.kind != LineInstruction || !line.label.empty() || !line.text.empty())
+        return false;
+    const string& op = line.opcode;
+    if (op == "MUL")
+        return line.src.mode == OpImmediate && line.src.label.empty() && IsReg(line.dst, m) && m % 2 == 1;
+    if (op == "ADD" || op == "SUB" || op == "BIC" || op == "BIS")
+        return line.src.mode == OpImmediate && line.src.label.empty() && IsReg(line.dst, m);
+    if (op == "ASL" || op == "ASR" || op == "SWAB" || op == "INC" || op == "DEC" || op == "NEG" ||
+        op == "COM" || op == "CLRB")
+        return IsReg(line.src, m);
+    return false;
+}
+
+// Whether the instruction writes the register; -1 for an unknown instruction
+static int WritesRegister(const CodeLine& line, int reg)
+{
+    const string& op = line.opcode;
+    for (const Operand* operand : { &line.src, &line.dst })
+    {
+        if ((operand->mode == OpAutoInc || operand->mode == OpAutoDec) && operand->reg == reg)
+            return 1;
+    }
+    if (op == "MUL" || op == "DIV" || op == "ASH" || op == "ASHC")
+    {
+        int rn = line.dst.reg;
+        bool pair = (op != "ASH") && (rn % 2 == 0);
+        return (reg == rn || (pair && reg == rn + 1)) ? 1 : 0;
+    }
+    if (op == "FADD" || op == "FSUB" || op == "FMUL" || op == "FDIV")
+        return 0;
+    const InstructionInfo* info = FindInstruction(op);
+    if (info == nullptr)
+        return -1;
+    if (info->operands == 0)
+        return 0;
+    const Operand& target = (info->operands == 2) ? line.dst : line.src;
+    return (info->writesdst && IsReg(target, reg)) ? 1 : 0;
+}
+
+// Whether the instruction writes memory that a variable may occupy; pushes write below SP only
+static bool WritesMemory(const CodeLine& line)
+{
+    const string& op = line.opcode;
+    if (op == "MUL" || op == "DIV" || op == "ASH" || op == "ASHC" ||
+        op == "FADD" || op == "FSUB" || op == "FMUL" || op == "FDIV")
+        return false;
+    const InstructionInfo* info = FindInstruction(op);
+    if (info == nullptr)
+        return true;
+    if (info->operands == 0 || !info->writesdst)
+        return false;
+    const Operand& target = (info->operands == 2) ? line.dst : line.src;
+    if (target.mode == OpReg)
+        return false;
+    if (target.mode == OpAutoDec && target.reg == 6)
+        return false;
+    return true;
+}
+
+// A value computed again while a register still holds it, within straight code:
+//   MOV src, Rm / [MUL #k, Rm, ASL Rm, ADD #k, Rm...]  again for the same Rm  ->  (remove)
+//   the same into another register                                           ->  MOV Rn, Rm
+// The register contents are tracked from the last label: a label, a call or an unknown instruction
+// forgets everything, a write to memory forgets the values read from memory.
+bool Peephole::RepeatedValue()
+{
+    string key[5];          // The value of R0..R4 as text, empty if unknown
+    bool memory[5] = {};    // The value was read from memory
+    auto forget = [&]() { for (int r = 0; r < 5; r++) key[r].clear(); };
+    for (size_t i = 0; i < m_lines.size(); i++)
+    {
+        const CodeLine& line = m_lines[i];
+        if (line.kind == LineComment)
+            continue;
+        if (line.kind != LineInstruction || !line.label.empty() || !line.text.empty())
+        {
+            // Labels join paths; raw lines and data are unknown; SOB changes its register
+            if (line.kind != LineBranch || line.opcode == "SOB")
+                forget();
+            continue;
+        }
+        const string& op = line.opcode;
+        if (op == "CALL" || op == "JMP" || op == "RETURN" || op == "EMT" || op == "TRAP")
+        {
+            forget();
+            continue;
+        }
+
+        // A value sequence: MOV src, Rm and its steps
+        if (op == "MOV" && line.dst.mode == OpReg && line.dst.reg <= 4 && IsStableSource(line.src))
+        {
+            int m = line.dst.reg;
+            string value = line.src.ToString();
+            size_t last = i;
+            for (size_t j = Next(i); j != string::npos && IsValueStep(m_lines[j], m); j = Next(j))
+            {
+                const CodeLine& step = m_lines[j];
+                value += "|" + step.opcode + " " + step.src.ToString();
+                last = j;
+            }
+            int holder = -1;
+            for (int r = 0; r < 5 && holder < 0; r++)
+            {
+                if (key[r] == value)
+                    holder = r;
+            }
+            if (holder >= 0 && !FlagsReadAfter(last, FlagsAll))
+            {
+                // The flags of the removed code are not needed
+                for (size_t j = last; j > i; j--)
+                {
+                    if (m_lines[j].kind == LineInstruction)
+                        Remove(j);
+                }
+                if (holder == m)
+                    Remove(i);
+                else
+                {
+                    m_lines[i].src = Operand::Reg(holder);
+                    m_lines[i].words = InstructionWords(m_lines[i]);
+                }
+                return true;
+            }
+            key[m] = value;
+            memory[m] = (line.src.mode != OpImmediate);
+            i = last;
+            continue;
+        }
+
+        // A copy keeps the value; a copy of the value the register already holds is not needed
+        if (op == "MOV" && line.src.mode == OpReg && line.src.reg <= 4 && line.dst.mode == OpReg && line.dst.reg <= 4)
+        {
+            bool same = line.src.reg == line.dst.reg ||
+                (!key[line.src.reg].empty() && key[line.src.reg] == key[line.dst.reg]);
+            if (same && !FlagsReadAfter(i, FlagsAll))
+            {
+                Remove(i);
+                return true;
+            }
+            key[line.dst.reg] = key[line.src.reg];
+            memory[line.dst.reg] = memory[line.src.reg];
+            continue;
+        }
+
+        for (int r = 0; r < 5; r++)
+        {
+            int writes = WritesRegister(line, r);
+            if (writes != 0)
+                key[r].clear();
+        }
+        if (WritesMemory(line))
+        {
+            for (int r = 0; r < 5; r++)
+            {
+                if (memory[r])
+                    key[r].clear();
+            }
+        }
+    }
+    return false;
+}
 
 void Peephole::Run()
 {
@@ -821,6 +1008,8 @@ void Peephole::Run()
                 }
             }
         }
+        if (!changed)
+            changed = RepeatedValue();
         if (!changed && !RemoveUnusedLabels())
             break;  // A removed label may open new windows: then one more round
     }
